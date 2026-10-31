@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build (Apple silicon and Intel)
-        run: scripts/build-app.sh
+        run: bash scripts/build-app.sh
       - name: Checksums
         run: cd build && shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
       - name: Draft release

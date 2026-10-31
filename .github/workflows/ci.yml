@@ -14,7 +14,7 @@ jobs:
       - name: Tests
         run: swift test
       - name: Build the app
-        run: UNIVERSAL=0 scripts/build-app.sh
+        run: UNIVERSAL=0 bash scripts/build-app.sh
       - name: Check the bundle
         run: |
           test -x "build/Nexonic Download Manager.app/Contents/MacOS/NexonicDownloadManager"
