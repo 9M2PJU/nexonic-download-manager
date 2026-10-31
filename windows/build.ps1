@@ -7,7 +7,9 @@ if (Test-Path build) { Remove-Item build -Recurse -Force }
 $common = @("-c", "Release", "-r", "win-x64", "--self-contained", "true", "-p:PublishSingleFile=true",
             "-p:IncludeNativeLibrariesForSelfExtract=true", "-p:Version=$version", "-o", $out)
 dotnet publish windows\App\App.csproj @common
+if ($LASTEXITCODE -ne 0) { throw "App build failed" }
 dotnet publish windows\Host\Host.csproj @common
+if ($LASTEXITCODE -ne 0) { throw "Helper build failed" }
 Get-ChildItem $out -Filter *.pdb | Remove-Item
 Copy-Item extension "$out\Extension" -Recurse
 Remove-Item "$out\Extension\helpers.test.js", "$out\Extension\package.json"
