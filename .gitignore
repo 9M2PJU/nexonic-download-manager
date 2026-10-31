@@ -1,0 +1,6 @@
+.build/
+build/
+*.pem
+.DS_Store
+.swiftpm/
+node_modules/

@@ -1,0 +1,22 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (Apple silicon and Intel)
+        run: scripts/build-app.sh
+      - name: Checksums
+        run: cd build && shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager ${GITHUB_REF_NAME#v}" \
+            --notes-file CHANGELOG.md build/*.dmg build/*.zip build/SHA256SUMS.txt

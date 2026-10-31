@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px -apple-system, system-ui, sans-serif; width: 280px; margin: 12px; color: #1d1d1f; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; gap: 8px; }
+  input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 5px; }
+  button { padding: 5px 10px; }
+  #status { font-size: 12px; }
+  .ok { color: #1a7f37; } .bad { color: #cf222e; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e1e; color: #eee; } }
+</style>
+</head>
+<body>
+  <h1>Nexonic Download Manager</h1>
+  <div id="status">Checking the app…</div>
+  <div class="row"><label for="enabled">Send downloads to the app</label><input type="checkbox" id="enabled"></div>
+  <div class="row"><input type="text" id="link" placeholder="Paste a link"><button id="send">Add</button></div>
+  <div class="row"><label for="min">Smallest file (MB)</label><input type="number" id="min" min="0" style="width:70px"></div>
+  <label for="skip">Keep these types in the browser</label>
+  <input type="text" id="skip" placeholder="e.g. pdf, jpg">
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
