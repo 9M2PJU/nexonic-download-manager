@@ -27,6 +27,37 @@ jobs:
         with:
           name: nexonic-download-manager
           path: build/*.dmg
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Tests
+        run: dotnet test windows/Tests/Tests.csproj
+      - name: Build the app and installer
+        run: ./windows/build.ps1
+        shell: pwsh
+      - name: Helper answers a ping
+        shell: pwsh
+        run: |
+          $body = [Text.Encoding]::UTF8.GetBytes('{"type":"ping"}')
+          $p = New-Object Diagnostics.Process
+          $p.StartInfo.FileName = "build\win\nexonic-host.exe"
+          $p.StartInfo.RedirectStandardInput = $true
+          $p.StartInfo.RedirectStandardOutput = $true
+          $p.StartInfo.UseShellExecute = $false
+          $p.Start() | Out-Null
+          $s = $p.StandardInput.BaseStream
+          $s.Write([BitConverter]::GetBytes($body.Length), 0, 4); $s.Write($body, 0, $body.Length); $s.Close()
+          $out = $p.StandardOutput.ReadToEnd(); $p.WaitForExit()
+          if ($out -notmatch '"ok":true') { throw "no ping answer: $out" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexonic-download-manager-windows
+          path: build/*.exe
   extension:
     runs-on: ubuntu-latest
     steps:

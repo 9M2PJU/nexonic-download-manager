@@ -12,11 +12,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build (Apple silicon and Intel)
         run: bash scripts/build-app.sh
-      - name: Checksums
-        run: cd build && shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager ${GITHUB_REF_NAME#v}" \
-            --notes-file CHANGELOG.md build/*.dmg build/*.zip build/SHA256SUMS.txt
+            --notes-file CHANGELOG.md build/*.dmg build/*.zip
+  windows:
+    needs: release
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: ./windows/build.ps1
+        shell: pwsh
+      - name: Add the Windows files to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release upload $env:GITHUB_REF_NAME (Get-ChildItem build\*.exe, build\*-windows-portable.zip | % FullName)

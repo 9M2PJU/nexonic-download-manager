@@ -1,0 +1,47 @@
+<Window x:Class="Nexonic.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Nexonic Download Manager" Width="980" Height="560"
+        AllowDrop="True" Drop="OnDrop">
+  <DockPanel>
+    <ToolBar DockPanel.Dock="Top">
+      <Button Content="➕ Add" Click="OnAdd" ToolTip="Add links (Ctrl+N)" />
+      <Button Content="▶ Resume" Click="OnResume" />
+      <Button Content="⏸ Pause" Click="OnPause" />
+      <Button Content="🗑 Remove" Click="OnRemove" />
+      <Separator />
+      <Button Content="Pause All" Click="OnPauseAll" />
+      <Button Content="Resume All" Click="OnResumeAll" />
+      <Button Content="Clear Finished" Click="OnClear" />
+      <Separator />
+      <ComboBox x:Name="Filter" Width="140" SelectionChanged="OnFilter" />
+      <Separator />
+      <Button Content="⚙ Settings" Click="OnSettings" />
+    </ToolBar>
+    <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" HeadersVisibility="Column"
+              GridLinesVisibility="None" MouseDoubleClick="OnOpen">
+      <DataGrid.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="Open" Click="OnOpen" />
+          <MenuItem Header="Show in Folder" Click="OnShowInFolder" />
+          <MenuItem Header="Copy Link" Click="OnCopyLink" />
+          <Separator />
+          <MenuItem Header="Resume" Click="OnResume" />
+          <MenuItem Header="Pause" Click="OnPause" />
+          <MenuItem Header="Remove" Click="OnRemove" />
+        </ContextMenu>
+      </DataGrid.ContextMenu>
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+        <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="80" />
+        <DataGridTemplateColumn Header="Progress" Width="130">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate><ProgressBar Value="{Binding Percent, Mode=OneWay}" Height="12" Margin="4,0" /></DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Speed" Binding="{Binding Speed}" Width="90" />
+        <DataGridTextColumn Header="Time Left" Binding="{Binding TimeLeft}" Width="80" />
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="160" />
+        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="90" />
+      </DataGrid.Columns>
+    </DataGrid>
+  </DockPanel>
+</Window>

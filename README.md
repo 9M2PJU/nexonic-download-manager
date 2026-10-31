@@ -1,10 +1,11 @@
 # Nexonic Download Manager
 
-**A fast, free download manager for macOS, with a browser extension.** Files download over many connections at once,
+**A fast, free download manager for macOS and Windows, with a browser extension.** Files download over many connections at once,
 pause and resume (even after a restart), and land sorted by type.
 
 [![CI](https://github.com/Shahrukhalid/nexonic-download-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Shahrukhalid/nexonic-download-manager/actions/workflows/ci.yml)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black)
+![Windows 10+](https://img.shields.io/badge/Windows-10%2B-0078D6)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -34,12 +35,19 @@ pause and resume (even after a restart), and land sorted by type.
 
 Requires macOS 13 Ventura or newer, on Apple silicon or Intel.
 
+### Windows
+
+Download `NexonicDownloadManager-Setup-<version>.exe` from Releases and run it (no administrator rights needed), or
+use the portable zip. Windows may show "Windows protected your PC" because the installer is not signed yet: click
+**More info → Run anyway**. Requires Windows 10 or 11 (64-bit). Closing the window keeps downloads running in the tray.
+
 ## Browser extension
 
 Works in Chromium-based browsers (version 116 or newer).
 
 1. Open the app once (this connects it to the installed browsers).
-2. In the app: **Settings → Browser → Save Extension Folder…** (or use the **Browser Extension** folder on the `.dmg`).
+2. Mac: **Settings → Browser → Save Extension Folder…** (or the **Browser Extension** folder on the `.dmg`).
+   Windows: the **Extension** folder inside the app's install folder.
 3. In the browser, open the extensions page, switch on **Developer mode**, click **Load unpacked** and select that folder.
 
 The popup shows whether the app is reachable, lets you switch the hand-off on or off, set the smallest file size to
@@ -60,6 +68,8 @@ UNIVERSAL=0 scripts/build-app.sh      # build/Nexonic Download Manager.app and a
 
 Universal builds (Apple silicon and Intel) need Xcode; set `SIGN_IDENTITY` to sign with a Developer ID certificate.
 
+Windows (needs the .NET 8 SDK; the installer needs Inno Setup 6): `pwsh windows/build.ps1`.
+
 ## How it works
 
 - `Sources/NexonicCore`: the download engine (probe, range planning, parallel parts, splitting, retries, resume,
@@ -67,7 +77,9 @@ Universal builds (Apple silicon and Intel) need Xcode; set `SIGN_IDENTITY` to si
 - `Sources/NexonicDownloadManager`: the SwiftUI app.
 - `Sources/NexonicHost`: a small helper inside the app that the browser talks to; it only accepts http and https
   links and hands them to the app.
-- `extension/`: the browser extension.
+- `windows/`: the Windows app (C#, WPF): the same engine in `Core`, the window in `App`, the helper in `Host`,
+  tests and the installer script (`windows/build.ps1`).
+- `extension/`: the browser extension (shared by both).
 
 Data lives in `~/Library/Application Support/Nexonic Download Manager/`.
 
