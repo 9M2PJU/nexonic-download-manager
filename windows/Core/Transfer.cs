@@ -14,6 +14,8 @@ public sealed class Transfer
 
     readonly int connections;
     readonly SpeedLimiter limiter;
+    /// <summary>This download's own limit, on top of the shared one (0 = none).</summary>
+    public SpeedLimiter OwnLimiter { get; } = new();
     readonly bool sortIntoCategories;
     readonly HttpClient http;
     readonly Uri origin;
@@ -23,21 +25,21 @@ public sealed class Transfer
     string PartsFolder => Path.Combine(AppPaths.Parts, Record.Id.ToString("N"));
     string PartPath(int id) => Path.Combine(PartsFolder, $"{id}.part");
 
-    public Transfer(DownloadRecord record, int connections, SpeedLimiter limiter, bool sortIntoCategories = false)
+    public Transfer(DownloadRecord record, int connections, SpeedLimiter limiter, bool sortIntoCategories = false, ProxySettings? proxy = null)
     {
         Record = record;
         this.connections = Math.Clamp(connections, 1, 32);
         this.limiter = limiter;
         this.sortIntoCategories = sortIntoCategories;
         origin = new Uri(record.Url);
-        http = new HttpClient(new SocketsHttpHandler
+        OwnLimiter.SetLimit((record.SpeedLimitKBps ?? 0) * 1024);
+        var handler = Network.Handler(proxy ?? new ProxySettings());
+        if (!string.IsNullOrEmpty(record.Username))
         {
-            AllowAutoRedirect = false, // redirects are followed by hand so cookies never leave the original host
-            UseCookies = false,
-            AutomaticDecompression = DecompressionMethods.None,
-            MaxConnectionsPerServer = 32,
-            ConnectTimeout = TimeSpan.FromSeconds(30),
-        }) { Timeout = Timeout.InfiniteTimeSpan };
+            handler.Credentials = new NetworkCredential(record.Username, record.Password ?? "");
+            handler.PreAuthenticate = true;
+        }
+        http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     public Task StartAsync()
@@ -72,7 +74,7 @@ public sealed class Transfer
             await DownloadAllAsync(ct);
             Join();
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* paused or removed */ }
+        catch (Exception) when (ct.IsCancellationRequested) { /* paused or removed */ }
         catch (Exception e)
         {
             Record.Status = DownloadStatus.Failed;
@@ -110,7 +112,12 @@ public sealed class Transfer
     async Task ProbeAsync(CancellationToken ct)
     {
         using var res = await SendAsync("bytes=0-0", ct); // headers only; the body is never read
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException($"The server answered HTTP {(int)res.StatusCode}");
+        var code = (int)res.StatusCode;
+        if (code == 401) throw new InvalidOperationException("The server asks for a user name and password (use Properties → Login)");
+        if (code == 407) throw new InvalidOperationException("The proxy asks for a user name and password (Options → Connection)");
+        if (code is 403 or 404 or 410 && Record.Segments.Count > 0)
+            throw new InvalidOperationException($"The link has expired (HTTP {code}). Use Refresh Link to continue from where it stopped");
+        if (!res.IsSuccessStatusCode) throw new InvalidOperationException($"The server answered HTTP {code}");
         long? size = null;
         var ranges = false;
         if (res.StatusCode == HttpStatusCode.PartialContent && res.Content.Headers.ContentRange?.Length is long total)
@@ -213,7 +220,9 @@ public sealed class Transfer
                     await file.WriteAsync(buffer.AsMemory(0, n), ct);
                     lock (Record.Segments) seg.Written += n;
                     Notify();
-                    var wait = limiter.Consume(n);
+                    var a = limiter.Consume(n);
+                    var b = OwnLimiter.Consume(n);
+                    var wait = a > b ? a : b;
                     if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
                 }
             }
@@ -246,6 +255,7 @@ public sealed class Transfer
             }
         }
         try { Directory.Delete(PartsFolder, true); } catch { }
+        if (Checksum.Parse(Record.Checksum) != null) Record.ChecksumResult = Checksum.Verify(Record.Checksum!, target);
         Record.SavedPath = target;
         Record.FileName = Path.GetFileName(target);
         Record.Status = DownloadStatus.Finished;
@@ -260,5 +270,36 @@ public sealed class Transfer
         if (!force && (now - lastNotify).TotalMilliseconds < 250) return;
         lastNotify = now;
         Changed?.Invoke(Record);
+    }
+}
+
+public static class Network
+{
+    /// <summary>Connection settings with the chosen proxy. Redirects are followed by hand so cookies never leave the original host.</summary>
+    public static SocketsHttpHandler Handler(ProxySettings p)
+    {
+        var h = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            AutomaticDecompression = DecompressionMethods.None,
+            MaxConnectionsPerServer = 32,
+            ConnectTimeout = TimeSpan.FromSeconds(30),
+        };
+        var host = p.Host.Trim();
+        switch (p.Mode)
+        {
+            case ProxyMode.None:
+                h.UseProxy = false;
+                break;
+            case ProxyMode.Http or ProxyMode.Socks when host.Length > 0:
+                var scheme = p.Mode == ProxyMode.Socks ? "socks5" : "http";
+                var proxy = new WebProxy(new Uri($"{scheme}://{host}:{p.Port}"));
+                if (p.Username.Length > 0) proxy.Credentials = new NetworkCredential(p.Username, p.Password);
+                h.Proxy = proxy;
+                h.UseProxy = true;
+                break;
+        }
+        return h;
     }
 }

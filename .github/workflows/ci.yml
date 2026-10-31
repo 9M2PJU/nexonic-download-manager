@@ -21,6 +21,8 @@ jobs:
           test -x "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host"
           test -f "build/Nexonic Download Manager.app/Contents/Resources/AppIcon.icns"
           test -f "build/Nexonic Download Manager.app/Contents/Resources/Extension/manifest.json"
+          test -f "build/Nexonic Download Manager.app/Contents/Resources/Firefox Add-on.xpi"
+          "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host" help | grep -q "ndm batch"
           plutil -lint "build/Nexonic Download Manager.app/Contents/Info.plist"
           python3 scripts/host-ping.py "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host"
       - uses: actions/upload-artifact@v4
@@ -69,5 +71,12 @@ jobs:
         working-directory: extension
       - name: Manifest is valid JSON with the fixed key
         run: python3 -c "import json; m=json.load(open('extension/manifest.json')); assert m['manifest_version']==3 and m['key']"
+      - name: Build the Chrome extension and the Firefox add-on
+        run: |
+          python3 scripts/build-extensions.py
+          node --check build/extension-firefox/background.js
+          node --check extension/content.js
+      - name: Firefox add-on passes the linter
+        run: npx --yes web-ext@8 lint --source-dir build/extension-firefox --warnings-as-errors=false
       - name: No outside names
         run: "! grep -rniE 'claude|anthropic' --exclude-dir=.git --exclude-dir=.github ."

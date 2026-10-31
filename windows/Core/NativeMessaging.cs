@@ -8,6 +8,7 @@ public static class NativeMessaging
 {
     public const string HostName = "com.nexonic.downloadmanager";
     public static readonly string[] AllowedExtensionIds = { "lbmdjnbmkidgmabcjdkhfldclkifidmi" };
+    public const string FirefoxAddonId = "{dec29d70-4c6f-43f7-aacd-af2ae04cd4c2}";
     const int MaxMessage = 1 << 20;
 
     public static JsonObject? Read(Stream input)
@@ -49,10 +50,28 @@ public static class NativeMessaging
         ["type"] = "stdio",
         ["allowed_origins"] = AllowedExtensionIds.Select(id => $"chrome-extension://{id}/").ToArray(),
     }, new JsonSerializerOptions { WriteIndented = true });
+
+    public static string FirefoxManifest(string hostPath) => JsonSerializer.Serialize(new Dictionary<string, object>
+    {
+        ["name"] = HostName,
+        ["description"] = "Nexonic Download Manager",
+        ["path"] = hostPath,
+        ["type"] = "stdio",
+        ["allowed_extensions"] = new[] { FirefoxAddonId },
+    }, new JsonSerializerOptions { WriteIndented = true });
 }
 
 public sealed record DownloadJob(string Url, string? FileName = null, string? Referrer = null, string? Cookies = null, string? UserAgent = null)
 {
+    // Optional extras from the command line and the extension
+    public string? Folder { get; init; }
+    public string? Queue { get; init; }
+    public bool? Start { get; init; }
+    public string? Username { get; init; }
+    public string? Password { get; init; }
+    public string? Checksum { get; init; }
+    public int? SpeedLimitKBps { get; init; }
+
     /// <summary>Only plain web links are accepted.</summary>
     public bool IsValid => Uri.TryCreate(Url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");
 }

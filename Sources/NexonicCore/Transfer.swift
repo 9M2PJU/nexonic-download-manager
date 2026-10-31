@@ -1,3 +1,4 @@
+import CFNetwork
 import Foundation
 
 /// One download: probes the server, splits the file into byte ranges, downloads them in parallel into part files,
@@ -9,6 +10,9 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
 
     private let connections: Int
     private let limiter: SpeedLimiter
+    /// This download's own limit, on top of the shared one (set any time; 0 = none).
+    public let ownLimiter = SpeedLimiter()
+    private let proxy: ProxySettings
     private let sortIntoCategories: Bool
     private let queue: DispatchQueue
     private var session: URLSession!
@@ -26,14 +30,17 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
 
     private var partsFolder: URL { AppPaths.parts.appendingPathComponent(record.id.uuidString, isDirectory: true) }
 
-    public init(record: DownloadRecord, connections: Int, limiter: SpeedLimiter, sortIntoCategories: Bool = false) {
+    public init(record: DownloadRecord, connections: Int, limiter: SpeedLimiter, sortIntoCategories: Bool = false,
+                proxy: ProxySettings = ProxySettings()) {
         self.record = record
+        self.proxy = proxy
         self.connections = max(1, min(32, connections))
         self.limiter = limiter
         self.sortIntoCategories = sortIntoCategories
         queue = DispatchQueue(label: "nexonic.transfer.\(record.id.uuidString)")
         super.init()
-        let config = URLSessionConfiguration.default
+        ownLimiter.setLimit(bytesPerSecond: (record.speedLimitKBps ?? 0) * 1024)
+        let config = Network.configuration(proxy: proxy)
         config.httpMaximumConnectionsPerHost = 32
         config.timeoutIntervalForRequest = 30
         config.httpShouldSetCookies = false
@@ -98,6 +105,11 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         guard !stopping else { return }
         guard let response, error == nil else {
             return fail(error?.localizedDescription ?? "No response from the server")
+        }
+        if response.statusCode == 401 { return fail("The server asks for a user name and password (use Properties → Login)") }
+        if response.statusCode == 407 { return fail("The proxy asks for a user name and password (Settings → Connection)") }
+        if [403, 404, 410].contains(response.statusCode), !record.segments.isEmpty {
+            return fail("The link has expired (HTTP \(response.statusCode)). Use Refresh Link to continue from where it stopped")
         }
         guard (200..<300).contains(response.statusCode) else { return fail("The server answered HTTP \(response.statusCode)") }
         var size: Int64?
@@ -183,6 +195,24 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         completionHandler(next)
     }
 
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                           completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        let space = challenge.protectionSpace
+        let methods = [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodNTLM,
+                       NSURLAuthenticationMethodDefault]
+        guard challenge.previousFailureCount == 0, methods.contains(space.authenticationMethod) else {
+            return completionHandler(.performDefaultHandling, nil)
+        }
+        if space.isProxy() {
+            guard !proxy.username.isEmpty else { return completionHandler(.performDefaultHandling, nil) }
+            return completionHandler(.useCredential, URLCredential(user: proxy.username, password: proxy.password, persistence: .forSession))
+        }
+        if let user = record.username, !user.isEmpty {
+            return completionHandler(.useCredential, URLCredential(user: user, password: record.password ?? "", persistence: .forSession))
+        }
+        completionHandler(.performDefaultHandling, nil)
+    }
+
     public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         if dataTask.taskIdentifier == probeTask {
@@ -216,7 +246,7 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         if record.segments[i].isComplete {
             dataTask.cancel()  // the range may have been shortened by a split
         } else {
-            let wait = limiter.consume(chunk.count)
+            let wait = max(limiter.consume(chunk.count), ownLimiter.consume(chunk.count))
             if wait > 0 {
                 dataTask.suspend()
                 queue.asyncAfter(deadline: .now() + wait) { [weak dataTask] in dataTask?.resume() }
@@ -286,6 +316,10 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
                 return fail("Size check failed: expected \(size) bytes, got \(written)")
             }
             try? FileManager.default.removeItem(at: partsFolder)
+            if let expected = record.checksum, let (algorithm, hex) = Checksum.parse(expected) {
+                let actual = (try? Checksum.compute(algorithm, file: target)) ?? ""
+                record.checksumResult = actual == hex ? "\(algorithm.rawValue) matches" : "\(algorithm.rawValue) does not match (got \(actual))"
+            }
             record.savedPath = target.path
             record.fileName = target.lastPathComponent
             record.status = .finished
@@ -310,5 +344,39 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         guard force || now.timeIntervalSince(lastNotify) > 0.25 else { return }
         lastNotify = now
         onChange?(record)
+    }
+}
+
+public enum Network {
+    /// Session settings with the chosen proxy.
+    public static func configuration(proxy: ProxySettings) -> URLSessionConfiguration {
+        let config = URLSessionConfiguration.default
+        let host = proxy.host.trimmingCharacters(in: .whitespaces)
+        switch proxy.mode {
+        case .system:
+            break
+        case .none:
+            config.connectionProxyDictionary = [:]
+        case .http where !host.isEmpty:
+            config.connectionProxyDictionary = [
+                kCFNetworkProxiesHTTPEnable as String: 1, kCFNetworkProxiesHTTPProxy as String: host,
+                kCFNetworkProxiesHTTPPort as String: proxy.port,
+                kCFNetworkProxiesHTTPSEnable as String: 1, kCFNetworkProxiesHTTPSProxy as String: host,
+                kCFNetworkProxiesHTTPSPort as String: proxy.port,
+            ]
+        case .socks where !host.isEmpty:
+            var d: [AnyHashable: Any] = [
+                kCFNetworkProxiesSOCKSEnable as String: 1, kCFNetworkProxiesSOCKSProxy as String: host,
+                kCFNetworkProxiesSOCKSPort as String: proxy.port,
+            ]
+            if !proxy.username.isEmpty {
+                d[kCFStreamPropertySOCKSUser as String] = proxy.username
+                d[kCFStreamPropertySOCKSPassword as String] = proxy.password
+            }
+            config.connectionProxyDictionary = d
+        default:
+            break
+        }
+        return config
     }
 }

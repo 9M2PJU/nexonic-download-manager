@@ -1,3 +1,20 @@
+## 0.2.0
+
+The Mac and Windows apps now have the same features and toolbar, and there is a Firefox add-on.
+
+- **Scheduler and queues:** several queues, each with start and stop times, weekdays, its own limit and an action when
+  done (quit, sleep or shut down). Move downloads between queues.
+- **Batch downloads** from patterns such as `file[001-100].jpg`, `[a-z]` and `[0-100:5]`.
+- **Site Grabber:** explore a website section and pick its files by type.
+- **Clipboard monitoring:** copying a link to a file opens the Add window.
+- **Download this video** button over players, plus media and link lists in the extension popup.
+- **Proxy** (system, HTTP, SOCKS5) and **password-protected downloads**.
+- **Refresh Link:** continue an expired download from a new link, pasted or caught from the browser.
+- **After a download:** Download Complete window, sound, checksum check, optional virus scan, files marked as downloaded.
+- **Per-download speed limit** and a richer Add window (name, folder, queue, login, checksum, limit, Download Later).
+- **Command line:** `ndm` to add links, batches, queues and options from scripts.
+- **Firefox add-on** (`.xpi`) next to the Chrome extension.
+
 ## 0.1.0
 
 First release.

@@ -1,10 +1,26 @@
 using System.Diagnostics;
 using Nexonic.Core;
 
-// Browser helper: answers the extension over native messaging and hands downloads to the app.
+// Browser helper (native messaging) and the ndm command line: both hand downloads to the app through the inbox.
+const string Version = "0.2.0";
+
+if (CommandLineTool.IsCommand(args))
+{
+    var r = CommandLineTool.Parse(args);
+    if (r.Help) { Console.WriteLine(CommandLineTool.Usage); return 0; }
+    if (r.Error != null) { Console.Error.WriteLine($"ndm: {r.Error}"); return 2; }
+    try
+    {
+        foreach (var j in r.Jobs) new Inbox().Drop(j);
+        StartApp();
+        Console.WriteLine($"Added {r.Jobs.Count} download{(r.Jobs.Count == 1 ? "" : "s")}");
+        return 0;
+    }
+    catch (Exception e) { Console.Error.WriteLine($"ndm: {e.Message}"); return 1; }
+}
+
 var input = Console.OpenStandardInput();
 var output = Console.OpenStandardOutput();
-const string Version = "0.1.0";
 
 void StartApp()
 {
@@ -28,7 +44,7 @@ while (NativeMessaging.Read(input) is { } msg)
                 msg["fileName"]?.GetValue<string>(),
                 msg["referrer"]?.GetValue<string>(),
                 msg["cookies"]?.GetValue<string>(),
-                msg["userAgent"]?.GetValue<string>());
+                msg["userAgent"]?.GetValue<string>()) { Start = msg["later"]?.GetValue<bool>() == true ? false : null };
             if (!job.IsValid)
             {
                 NativeMessaging.Write(output, new { ok = false, error = "Only http and https links can be downloaded" });
@@ -54,3 +70,4 @@ while (NativeMessaging.Read(input) is { } msg)
             break;
     }
 }
+return 0;

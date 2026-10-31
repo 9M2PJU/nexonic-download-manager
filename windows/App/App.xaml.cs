@@ -37,12 +37,31 @@ public partial class App : Application
         tray.DoubleClick += (_, _) => ShowWindow();
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Show Downloads", null, (_, _) => ShowWindow());
-        menu.Items.Add("Pause All", null, (_, _) => manager.PauseAll());
+        menu.Items.Add("Add URL…", null, (_, _) => window!.ShowAdd(Dialogs.ClipboardLink()));
+        menu.Items.Add("Stop All", null, (_, _) => manager.PauseAll());
         menu.Items.Add("Resume All", null, (_, _) => manager.ResumeAll());
-        menu.Items.Add("Quit", null, (_, _) => { manager.Save(); tray!.Visible = false; Shutdown(); });
+        menu.Items.Add("Quit", null, (_, _) => Quit(manager));
         tray.ContextMenuStrip = menu;
-        manager.Finished += r => tray.ShowBalloonTip(3000, "Download finished", r.FileName, System.Windows.Forms.ToolTipIcon.Info);
+        manager.Notify += (title, body) =>
+        {
+            if (manager.Settings.Notifications) tray.ShowBalloonTip(3000, title, body, System.Windows.Forms.ToolTipIcon.Info);
+        };
+        manager.Finished += r =>
+        {
+            if (manager.Settings.Notifications)
+                tray.ShowBalloonTip(3000, "Download finished", r.FileName + (r.ChecksumResult is { } c ? " – " + c : ""), System.Windows.Forms.ToolTipIcon.Info);
+            if (manager.Settings.ShowCompleteDialog) Dialogs.Complete(manager, r);
+        };
+        manager.ClipboardLink += link => window.ShowAdd(link);
+        manager.QuitRequested += () => Quit(manager);
         _ = ListenAsync(manager);
+    }
+
+    void Quit(DownloadManager manager)
+    {
+        manager.Save();
+        if (tray != null) tray.Visible = false;
+        Shutdown();
     }
 
     void ShowWindow()
@@ -74,5 +93,9 @@ public partial class App : Application
             using var key = Registry.CurrentUser.CreateSubKey($@"Software\{browser}\NativeMessagingHosts\{NativeMessaging.HostName}");
             key.SetValue("", manifest);
         }
+        var firefox = Path.Combine(AppPaths.Support, NativeMessaging.HostName + ".firefox.json");
+        File.WriteAllText(firefox, NativeMessaging.FirefoxManifest(host));
+        using (var key = Registry.CurrentUser.CreateSubKey($@"Software\Mozilla\NativeMessagingHosts\{NativeMessaging.HostName}"))
+            key.SetValue("", firefox);
     }
 }

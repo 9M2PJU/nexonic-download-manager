@@ -9,60 +9,93 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             Form {
-                Stepper("Connections per download: \(manager.settings.connections)",
-                        value: $manager.settings.connections, in: 1...32)
-                Stepper("Downloads at the same time: \(manager.settings.maxActive)",
-                        value: $manager.settings.maxActive, in: 1...10)
-                HStack {
-                    Text("Speed limit (KB/s, 0 = none)")
-                    TextField("", value: $manager.settings.speedLimitKBps, format: .number).frame(width: 90)
+                Stepper("Connections per download: \(manager.settings.connections)", value: $manager.settings.connections, in: 1...32)
+                Stepper("Downloads at the same time: \(manager.settings.maxActive)", value: $manager.settings.maxActive, in: 1...10)
+                LabeledContent("Save to") {
+                    HStack {
+                        Text(manager.settings.folder.path).lineLimit(1).truncationMode(.middle)
+                        Button("Choose…") { if let u = chooseFolder(manager.settings.folder) { manager.settings.folder = u } }
+                    }
                 }
-                HStack {
-                    Text("Save to: \(manager.settings.folder.path)").lineLimit(1)
-                    Spacer()
-                    Button("Choose…") { chooseFolder() }
-                }
-                Toggle("Sort into category folders", isOn: $manager.settings.sortIntoCategoryFolders)
+                Toggle("Sort into category folders (Video, Music, Documents…)", isOn: $manager.settings.sortIntoCategoryFolders)
                 Toggle("Notifications", isOn: $manager.settings.notifications)
             }
-            .padding(20)
+            .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gearshape") }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Browser extension").font(.headline)
-                Text("""
-                1. Click Save Extension Folder and pick a place (for example Documents).
-                2. In your browser open the extensions page, switch on Developer mode and choose Load unpacked.
-                3. Select the saved Nexonic Extension folder. Downloads from the browser now open here.
-                """).fixedSize(horizontal: false, vertical: true)
-                Button("Save Extension Folder…") { saveExtension() }
+            Form {
+                TextField("Speed limit for all downloads in KB/s (0 = none)", value: $manager.settings.speedLimitKBps, format: .number)
+                Picker("Proxy", selection: $manager.settings.proxy.mode) {
+                    ForEach(ProxyMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if manager.settings.proxy.mode == .http || manager.settings.proxy.mode == .socks {
+                    TextField("Proxy address", text: $manager.settings.proxy.host, prompt: Text("proxy.example.com"))
+                    TextField("Port", value: $manager.settings.proxy.port, format: .number.grouping(.never))
+                    TextField("User name (optional)", text: $manager.settings.proxy.username)
+                    SecureField("Password", text: $manager.settings.proxy.password)
+                }
+                Text("Proxy changes apply to downloads started afterwards. Password-protected downloads: add the user name and password in the Add window or under Properties.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .formStyle(.grouped)
+            .tabItem { Label("Connection", systemImage: "network") }
+
+            Form {
+                Toggle("Watch the clipboard for copied download links", isOn: $manager.settings.monitorClipboard)
+                TextField("File types", text: $manager.settings.clipboardTypes, axis: .vertical).lineLimit(2...4)
+                Text("When you copy a link that ends in one of these types, the Add window opens with it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .formStyle(.grouped)
+            .tabItem { Label("Clipboard", systemImage: "doc.on.clipboard") }
+
+            Form {
+                Toggle("Show the Download Complete window", isOn: $manager.settings.showCompleteDialog)
+                Toggle("Play a sound", isOn: $manager.settings.playSound)
+                Toggle("Mark files as downloaded so macOS checks them when first opened", isOn: $manager.settings.markDownloads)
+                Toggle("Scan each finished file with a virus scanner", isOn: $manager.settings.scanEnabled)
+                TextField("Scanner command (the file is added at the end)", text: $manager.settings.scanCommand,
+                          prompt: Text("/usr/local/bin/clamscan --no-summary"))
+                    .disabled(!manager.settings.scanEnabled)
+                Text("Expected checksums are checked automatically when a download finishes. Queues can also quit the app, sleep or shut down the Mac when they are done (Scheduler).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .formStyle(.grouped)
+            .tabItem { Label("After Download", systemImage: "checkmark.seal") }
+
+            Form {
+                Section("Chrome, Edge, Brave, Vivaldi") {
+                    Text("Save the extension folder, open the browser's extensions page, switch on Developer mode, choose Load unpacked and pick the folder.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Save Extension Folder…") { save(firefox: false) }
+                }
+                Section("Firefox") {
+                    Text("Save the add-on file and drag it onto a Firefox window. Firefox installs add-ons that are signed; see the README for signing your copy.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Save Firefox Add-on…") { save(firefox: true) }
+                }
+                Section("Command line") {
+                    Text("Install the ndm command, then for example: ndm https://example.com/file.zip --queue Night")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Install ndm Command…") { message = HostInstaller.installCommand() }
+                }
                 if !message.isEmpty { Text(message).font(.caption).foregroundStyle(.secondary) }
             }
-            .padding(20)
-            .tabItem { Label("Browser", systemImage: "globe") }
+            .formStyle(.grouped)
+            .tabItem { Label("Browsers & Command Line", systemImage: "globe") }
         }
-        .frame(width: 520, height: 300)
+        .frame(width: 580, height: 400)
+        .tint(brand)
     }
 
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        if panel.runModal() == .OK, let url = panel.url { manager.settings.folder = url }
-    }
-
-    private func saveExtension() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.prompt = "Save Here"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+    private func save(firefox: Bool) {
+        guard let folder = chooseFolder(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) else { return }
         do {
-            let dest = try HostInstaller.saveExtension(to: url)
+            let dest = try HostInstaller.saveExtension(firefox: firefox, to: folder)
             message = "Saved to \(dest.path)"
             NSWorkspace.shared.activateFileViewerSelecting([dest])
         } catch {
-            message = "Could not save the extension: \(error.localizedDescription)"
+            message = "Could not save: \(error.localizedDescription)"
         }
     }
 }

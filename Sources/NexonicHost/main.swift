@@ -1,20 +1,43 @@
 import Foundation
 import NexonicCore
 
-// Browser helper: answers the extension over native messaging and hands downloads to the app.
-let input = FileHandle.standardInput
-let output = FileHandle.standardOutput
-let version = "0.1.0"
-
-func reply(_ object: [String: Any]) {
-    if let data = try? NativeMessaging.encode(object) { output.write(data) }
-}
+// Browser helper (native messaging) and the `ndm` command line: both hand downloads to the app through the inbox.
+let version = "0.2.0"
 
 func openApp(_ url: String) {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
     p.arguments = ["-g", url]
     try? p.run()
+    p.waitUntilExit()
+}
+
+let arguments = Array(CommandLine.arguments.dropFirst())
+if CommandLineTool.isCommand(arguments) {
+    switch CommandLineTool.parse(arguments) {
+    case .help:
+        print(CommandLineTool.usage)
+    case .failure(let message):
+        FileHandle.standardError.write(Data("ndm: \(message)\n".utf8))
+        exit(2)
+    case .jobs(let jobs):
+        do {
+            for job in jobs { try Inbox().drop(job) }
+            openApp("nexonicdm://inbox")
+            print("Added \(jobs.count) download\(jobs.count == 1 ? "" : "s")")
+        } catch {
+            FileHandle.standardError.write(Data("ndm: \(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
+    }
+    exit(0)
+}
+
+let input = FileHandle.standardInput
+let output = FileHandle.standardOutput
+
+func reply(_ object: [String: Any]) {
+    if let data = try? NativeMessaging.encode(object) { output.write(data) }
 }
 
 while let message = try? NativeMessaging.read(from: input) {
@@ -22,13 +45,14 @@ while let message = try? NativeMessaging.read(from: input) {
     case "ping":
         reply(["ok": true, "version": version])
     case "download":
-        let job = DownloadJob(
+        var job = DownloadJob(
             url: message["url"] as? String ?? "",
             fileName: message["fileName"] as? String,
             referrer: message["referrer"] as? String,
             cookies: message["cookies"] as? String,
             userAgent: message["userAgent"] as? String
         )
+        if let later = message["later"] as? Bool, later { job.start = false }
         guard job.validURL != nil else {
             reply(["ok": false, "error": "Only http and https links can be downloaded"])
             continue

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using Nexonic.Core;
 
 namespace Nexonic.App;
@@ -11,16 +12,21 @@ namespace Nexonic.App;
 public partial class MainWindow : Window
 {
     readonly DownloadManager manager;
-    static readonly string[] Filters = { "All Downloads", "In Progress", "Unfinished", "Finished" };
+    string filter = "all";
+    bool rebuilding;
 
     public MainWindow(DownloadManager manager)
     {
         InitializeComponent();
         this.manager = manager;
         Grid.ItemsSource = manager.Rows;
-        foreach (var f in Filters.Concat(Enum.GetNames<FileCategory>())) Filter.Items.Add(f);
-        Filter.SelectedIndex = 0;
+        BuildSidebar();
+        manager.Queues.CollectionChanged += (_, _) => BuildSidebar();
         InputBindings.Add(new KeyBinding(new Cmd(() => OnAdd(this, new RoutedEventArgs())), Key.N, ModifierKeys.Control));
+        InputBindings.Add(new KeyBinding(new Cmd(() => OnRemove(this, new RoutedEventArgs())), Key.Delete, ModifierKeys.None));
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (_, _) => ShowDetails();
+        timer.Start();
     }
 
     // Closing the window keeps downloads running in the tray.
@@ -31,96 +37,172 @@ public partial class MainWindow : Window
         Hide();
     }
 
-    Row? Selected => Grid.SelectedItem as Row;
+    // ---- sidebar ----
 
-    void OnAdd(object s, RoutedEventArgs e)
+    public void BuildSidebar()
     {
-        var box = new TextBox { AcceptsReturn = true, Height = 160, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        if (Clipboard.ContainsText() && Clipboard.GetText().StartsWith("http")) box.Text = Clipboard.GetText();
-        var ok = new Button { Content = "Download", IsDefault = true, Width = 90, Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
-        var panel = new StackPanel { Margin = new Thickness(12) };
-        panel.Children.Add(new TextBlock { Text = "Paste one or more links, one per line." });
-        panel.Children.Add(box);
-        panel.Children.Add(ok);
-        var dlg = new Window { Title = "Add Downloads", Content = panel, Width = 520, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        ok.Click += (_, _) => { manager.AddLinks(box.Text); dlg.Close(); };
-        dlg.ShowDialog();
+        rebuilding = true;
+        Sidebar.Items.Clear();
+        void Header(string text) => Sidebar.Items.Add(new ListBoxItem
+        {
+            Content = text.ToUpperInvariant(), IsEnabled = false, FontSize = 11, FontWeight = FontWeights.SemiBold,
+            Foreground = Brushes.Gray, Margin = new Thickness(4, 8, 0, 2),
+        });
+        void Entry(string text, string key) => Sidebar.Items.Add(new ListBoxItem { Content = text, Tag = key, Padding = new Thickness(14, 4, 4, 4) });
+        Header("Downloads");
+        Entry("All Downloads", "all");
+        Entry("In Progress", "active");
+        Entry("Unfinished", "unfinished");
+        Entry("Finished", "finished");
+        Header("Categories");
+        foreach (var c in Enum.GetNames<FileCategory>()) Entry(c, "cat:" + c);
+        Header("Queues");
+        foreach (var q in manager.Queues) Entry((q.Running ? "▶ " : "⏸ ") + q.Name, "queue:" + q.Id);
+        Sidebar.SelectedItem = Sidebar.Items.OfType<ListBoxItem>().FirstOrDefault(i => (string?)i.Tag == filter)
+                               ?? Sidebar.Items.OfType<ListBoxItem>().First(i => (string?)i.Tag == "all");
+        rebuilding = false;
+        ApplyFilter();
     }
 
-    void OnResume(object s, RoutedEventArgs e) { if (Selected is { } r) manager.Resume(r); }
-    void OnPause(object s, RoutedEventArgs e) { if (Selected is { } r) manager.Pause(r); }
-    void OnRemove(object s, RoutedEventArgs e) { if (Selected is { } r) manager.Remove(r); }
-    void OnPauseAll(object s, RoutedEventArgs e) => manager.PauseAll();
-    void OnResumeAll(object s, RoutedEventArgs e) => manager.ResumeAll();
-    void OnClear(object s, RoutedEventArgs e) => manager.ClearFinished();
-
-    void OnOpen(object s, RoutedEventArgs e)
-    {
-        if (Selected?.Record.SavedPath is { } p) Process.Start(new ProcessStartInfo(p) { UseShellExecute = true });
-    }
-
-    void OnShowInFolder(object s, RoutedEventArgs e)
-    {
-        if (Selected?.Record.SavedPath is { } p) Process.Start("explorer.exe", $"/select,\"{p}\"");
-    }
-
-    void OnCopyLink(object s, RoutedEventArgs e) { if (Selected is { } r) Clipboard.SetText(r.Record.Url); }
+    string CurrentQueue => filter.StartsWith("queue:") ? filter[6..] : DownloadQueue.MainId;
 
     void OnFilter(object s, SelectionChangedEventArgs e)
     {
-        var f = Filter.SelectedItem as string;
+        if (rebuilding || Sidebar.SelectedItem is not ListBoxItem { Tag: string key }) return;
+        filter = key;
+        ApplyFilter();
+    }
+
+    void ApplyFilter()
+    {
+        var f = filter;
         CollectionViewSource.GetDefaultView(Grid.ItemsSource).Filter = o =>
         {
             var r = ((Row)o).Record;
             return f switch
             {
-                "In Progress" => r.IsActive || r.Status == DownloadStatus.Queued,
-                "Unfinished" => r.Status != DownloadStatus.Finished,
-                "Finished" => r.Status == DownloadStatus.Finished,
-                "All Downloads" or null => true,
-                _ => r.Category.ToString() == f,
+                "active" => r.IsActive || r.Status == DownloadStatus.Queued,
+                "unfinished" => r.Status != DownloadStatus.Finished,
+                "finished" => r.Status == DownloadStatus.Finished,
+                _ when f.StartsWith("cat:") => r.Category.ToString() == f[4..],
+                _ when f.StartsWith("queue:") => r.Queue == f[6..],
+                _ => true,
             };
         };
     }
 
-    void OnDrop(object s, DragEventArgs e)
+    // ---- selection and details ----
+
+    List<Row> Selected => Grid.SelectedItems.OfType<Row>().ToList();
+    Row? One => Grid.SelectedItems.Count == 1 ? Grid.SelectedItem as Row : null;
+
+    void OnSelection(object s, SelectionChangedEventArgs e) => ShowDetails();
+
+    void ShowDetails()
     {
-        if (e.Data.GetData(DataFormats.Text) is string text) manager.AddLinks(text);
+        if (One is not { } row) { Details.Visibility = Visibility.Collapsed; return; }
+        var r = row.Record;
+        Details.Visibility = Visibility.Visible;
+        DetailName.Text = r.FileName;
+        DetailUrl.Text = r.Url;
+        Bar.Update(r);
+        var parts = new List<string> { $"{Row.Bytes(r.Received)} of {(r.Size is long s ? Row.Bytes(s) : "unknown size")}" };
+        if (r.IsActive)
+        {
+            if (row.Speed.Length > 0) parts.Add(row.Speed);
+            if (row.TimeLeft.Length > 0) parts.Add(row.TimeLeft + " left");
+            lock (r.Segments) parts.Add($"Connections: {r.Segments.Count(x => !x.IsComplete)}");
+        }
+        parts.Add(r.AcceptsRanges || r.Status == DownloadStatus.Queued ? "Resume: yes" : "Resume: no");
+        parts.Add("Queue: " + row.Queue);
+        if (r.SpeedLimitKBps is int l) parts.Add($"Limit: {l} KB/s");
+        if (r.ChecksumResult is { } c) parts.Add(c);
+        DetailInfo.Text = string.Join("   ·   ", parts);
+        DetailError.Text = r.Error ?? "";
     }
 
-    void OnSettings(object s, RoutedEventArgs e)
+    // ---- toolbar ----
+
+    void OnAdd(object s, RoutedEventArgs e) => ShowAdd(Dialogs.ClipboardLink(), CurrentQueue);
+
+    bool adding;
+
+    public void ShowAdd(string links, string? queueId = null)
     {
-        var st = manager.Settings;
-        TextBox Field(string v) => new() { Text = v, Width = 260, Margin = new Thickness(0, 2, 0, 6) };
-        var conn = Field(st.Connections.ToString());
-        var active = Field(st.MaxActive.ToString());
-        var limit = Field(st.SpeedLimitKBps.ToString());
-        var folder = Field(st.Folder);
-        var sort = new CheckBox { Content = "Sort into category folders", IsChecked = st.SortIntoCategoryFolders, Margin = new Thickness(0, 4, 0, 8) };
-        var save = new Button { Content = "Save", IsDefault = true, Width = 90, HorizontalAlignment = HorizontalAlignment.Right };
-        var p = new StackPanel { Margin = new Thickness(12) };
-        foreach (var (label, box) in new[] { ("Connections per download (1-32)", conn), ("Downloads at the same time", active), ("Speed limit in KB/s (0 = none)", limit), ("Save to folder", folder) })
+        if (adding) return; // one Add window at a time (the clipboard may offer another link meanwhile)
+        adding = true;
+        try
         {
-            p.Children.Add(new TextBlock { Text = label });
-            p.Children.Add(box);
+            Bring();
+            Dialogs.Add(this, manager, links, queueId ?? DownloadQueue.MainId);
         }
-        p.Children.Add(sort);
-        p.Children.Add(new TextBlock { Text = "Browser extension: open your browser's extensions page, switch on Developer mode, choose Load unpacked and pick the Extension folder next to this app.", TextWrapping = TextWrapping.Wrap, Width = 260, Margin = new Thickness(0, 0, 0, 8) });
-        p.Children.Add(save);
-        var dlg = new Window { Title = "Settings", Content = p, SizeToContent = SizeToContent.WidthAndHeight, Owner = this, ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        save.Click += (_, _) =>
+        finally { adding = false; }
+    }
+
+    public void Bring()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    void OnResume(object s, RoutedEventArgs e) { foreach (var r in Selected) manager.Resume(r); }
+    void OnPause(object s, RoutedEventArgs e) { foreach (var r in Selected) manager.Pause(r); }
+    void OnRemove(object s, RoutedEventArgs e) { foreach (var r in Selected) manager.Remove(r); }
+    void OnPauseAll(object s, RoutedEventArgs e) => manager.PauseAll();
+    void OnClear(object s, RoutedEventArgs e) => manager.ClearFinished();
+    void OnScheduler(object s, RoutedEventArgs e) { Dialogs.Scheduler(this, manager, CurrentQueue); BuildSidebar(); }
+    void OnStartQueue(object s, RoutedEventArgs e) { manager.StartQueue(CurrentQueue); BuildSidebar(); }
+    void OnStopQueue(object s, RoutedEventArgs e) { manager.StopQueue(CurrentQueue); BuildSidebar(); }
+    void OnGrabber(object s, RoutedEventArgs e) => Dialogs.Grabber(this, manager, CurrentQueue);
+    void OnBatch(object s, RoutedEventArgs e) => Dialogs.Batch(this, manager, CurrentQueue);
+    void OnSettings(object s, RoutedEventArgs e) => Dialogs.Options(this, manager);
+
+    void OnRemoveFile(object s, RoutedEventArgs e)
+    {
+        foreach (var r in Selected)
         {
-            manager.ApplySettings(new AppSettings
+            if (r.Record.SavedPath is { } p && System.IO.File.Exists(p))
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            manager.Remove(r);
+        }
+    }
+
+    void OnOpen(object s, RoutedEventArgs e)
+    {
+        if (One?.Record.SavedPath is { } p) Process.Start(new ProcessStartInfo(p) { UseShellExecute = true });
+    }
+
+    void OnShowInFolder(object s, RoutedEventArgs e)
+    {
+        if (One?.Record.SavedPath is { } p) Process.Start("explorer.exe", $"/select,\"{p}\"");
+    }
+
+    void OnCopyLink(object s, RoutedEventArgs e) { if (One is { } r) Clipboard.SetText(r.Record.Url); }
+    void OnRefreshLink(object s, RoutedEventArgs e) { if (One is { } r) Dialogs.RefreshLink(this, manager, r); }
+    void OnProperties(object s, RoutedEventArgs e) { if (One is { } r) Dialogs.Properties(this, manager, r); }
+
+    protected override void OnContextMenuOpening(ContextMenuEventArgs e)
+    {
+        MoveMenu.Items.Clear();
+        foreach (var q in manager.Queues)
+        {
+            var item = new MenuItem { Header = q.Name };
+            var id = q.Id;
+            item.Click += (_, _) =>
             {
-                Connections = Math.Clamp(int.TryParse(conn.Text, out var c) ? c : 8, 1, 32),
-                MaxActive = Math.Clamp(int.TryParse(active.Text, out var a) ? a : 3, 1, 10),
-                SpeedLimitKBps = Math.Max(0, int.TryParse(limit.Text, out var l) ? l : 0),
-                Folder = folder.Text.Trim().Length > 0 ? folder.Text.Trim() : st.Folder,
-                SortIntoCategoryFolders = sort.IsChecked == true,
-            });
-            dlg.Close();
-        };
-        dlg.ShowDialog();
+                foreach (var r in Selected)
+                    manager.SetDetails(r, r.Record.Username ?? "", r.Record.Password ?? "", r.Record.Checksum ?? "", r.Record.SpeedLimitKBps ?? 0, id);
+            };
+            MoveMenu.Items.Add(item);
+        }
+        base.OnContextMenuOpening(e);
+    }
+
+    void OnDrop(object s, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.Text) is string text) ShowAdd(text, CurrentQueue);
     }
 
     sealed class Cmd(Action run) : ICommand
@@ -128,5 +210,34 @@ public partial class MainWindow : Window
         public event EventHandler? CanExecuteChanged { add { } remove { } }
         public bool CanExecute(object? p) => true;
         public void Execute(object? p) => run();
+    }
+}
+
+/// <summary>One bar for the whole file; each range shows how much of it has arrived.</summary>
+public sealed class SegmentBar : FrameworkElement
+{
+    List<(long Start, long Written, bool Done)> parts = new();
+    long size;
+    static readonly Brush Back = new SolidColorBrush(Color.FromRgb(0xE3, 0xE8, 0xEF));
+    static readonly Brush Busy = new SolidColorBrush(Color.FromRgb(0x1F, 0x6F, 0xEB));
+    static readonly Brush Done = new SolidColorBrush(Color.FromRgb(0x2D, 0xA4, 0x4E));
+
+    public void Update(DownloadRecord r)
+    {
+        lock (r.Segments) parts = r.Segments.Select(s => (s.Start, s.Written, s.IsComplete)).ToList();
+        size = r.Size ?? 0;
+        InvalidateVisual();
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        dc.DrawRoundedRectangle(Back, null, new Rect(0, 0, ActualWidth, ActualHeight), 3, 3);
+        if (size <= 0) return;
+        foreach (var (start, written, done) in parts)
+        {
+            var x = ActualWidth * start / size;
+            var w = Math.Max(0.5, ActualWidth * written / size);
+            dc.DrawRectangle(done ? Done : Busy, null, new Rect(x, 0, w, ActualHeight));
+        }
     }
 }

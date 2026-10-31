@@ -11,8 +11,12 @@ if ($LASTEXITCODE -ne 0) { throw "App build failed" }
 dotnet publish windows\Host\Host.csproj @common
 if ($LASTEXITCODE -ne 0) { throw "Helper build failed" }
 Get-ChildItem $out -Filter *.pdb | Remove-Item
-Copy-Item extension "$out\Extension" -Recurse
-Remove-Item "$out\Extension\helpers.test.js", "$out\Extension\package.json"
+python scripts\build-extensions.py
+if ($LASTEXITCODE -ne 0) { throw "Extension build failed" }
+Copy-Item build\extension-chrome "$out\Extension" -Recurse
+Copy-Item "build\NexonicFirefoxAddon-$version.xpi" "$out\Firefox Add-on.xpi"
+# The ndm command runs the helper in command-line mode; the installer puts this folder on the user's PATH.
+Set-Content -Path "$out\ndm.cmd" -Value "@echo off`r`n`"%~dp0nexonic-host.exe`" %*" -Encoding ascii -NoNewline
 Compress-Archive -Path "$out\*" -DestinationPath "build\NexonicDownloadManager-$version-windows-portable.zip"
 $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }

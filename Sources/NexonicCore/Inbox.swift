@@ -6,6 +6,14 @@ public struct DownloadJob: Codable, Equatable, Sendable {
     public var referrer: String?
     public var cookies: String?
     public var userAgent: String?
+    // Optional extras from the command line
+    public var folder: String?
+    public var queue: String?
+    public var start: Bool?
+    public var username: String?
+    public var password: String?
+    public var checksum: String?
+    public var speedLimitKBps: Int?
 
     public init(url: String, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil, userAgent: String? = nil) {
         self.url = url
@@ -59,4 +67,5 @@ public enum AppPaths {
     public static var parts: URL { support.appendingPathComponent("Parts", isDirectory: true) }
     public static var downloads: URL { support.appendingPathComponent("downloads.json") }
     public static var settings: URL { support.appendingPathComponent("settings.json") }
+    public static var queues: URL { support.appendingPathComponent("queues.json") }
 }

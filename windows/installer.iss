@@ -16,6 +16,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
+ChangesEnvironment=yes
 
 [Files]
 Source: "..\build\win\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -26,6 +27,23 @@ Name: "{userdesktop}\Nexonic Download Manager"; Filename: "{app}\NexonicDownload
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"
+Name: "addtopath"; Description: "Add the ndm command to the command line"
+
+[Registry]
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}'))
+
+[Code]
+function NeedsAddPath(Dir: string): Boolean;
+var
+  Path: string;
+begin
+  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Path) then
+  begin
+    Result := True;
+    exit;
+  end;
+  Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Path) + ';') = 0;
+end;
 
 [Run]
 Filename: "{app}\NexonicDownloadManager.exe"; Description: "Start Nexonic Download Manager"; Flags: nowait postinstall skipifsilent

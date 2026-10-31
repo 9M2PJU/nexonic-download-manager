@@ -5,6 +5,8 @@ public enum NativeMessaging {
     public static let hostName = "com.nexonic.downloadmanager"
     /// Extension IDs allowed to talk to the helper. Add the store ID here once the extension is listed.
     public static let allowedExtensionIDs = ["lbmdjnbmkidgmabcjdkhfldclkifidmi"]
+    /// The Firefox add-on's ID.
+    public static let firefoxAddonID = "{dec29d70-4c6f-43f7-aacd-af2ae04cd4c2}"
     public static let maxMessage = 1 << 20
 
     public static func encode(_ object: Any) throws -> Data {
@@ -31,6 +33,16 @@ public enum NativeMessaging {
             "path": hostPath,
             "type": "stdio",
             "allowed_origins": allowedExtensionIDs.map { "chrome-extension://\($0)/" },
+        ]
+    }
+
+    public static func firefoxManifest(hostPath: String) -> [String: Any] {
+        [
+            "name": hostName,
+            "description": "Nexonic Download Manager",
+            "path": hostPath,
+            "type": "stdio",
+            "allowed_extensions": [firefoxAddonID],
         ]
     }
 }

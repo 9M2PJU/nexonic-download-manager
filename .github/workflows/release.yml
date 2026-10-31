@@ -17,7 +17,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager ${GITHUB_REF_NAME#v}" \
-            --notes-file CHANGELOG.md build/*.dmg build/*.zip
+            --notes-file CHANGELOG.md build/*.dmg build/*.zip build/*.xpi
   windows:
     needs: release
     runs-on: windows-latest

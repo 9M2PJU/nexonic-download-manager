@@ -1,30 +1,55 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Threading;
 using Nexonic.Core;
 
 namespace Nexonic.App;
 
-/// <summary>Queue, persistence and speed for the window (UI thread only).</summary>
+public sealed class AddOptions
+{
+    public string? Folder { get; set; }
+    public string? FileName { get; set; }
+    public string QueueId { get; set; } = DownloadQueue.MainId;
+    public bool Start { get; set; } = true;
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string Checksum { get; set; } = "";
+    public int SpeedLimitKBps { get; set; }
+}
+
+/// <summary>Queues, scheduler, persistence and after-download actions (UI thread only).</summary>
 public sealed class DownloadManager
 {
     public ObservableCollection<Row> Rows { get; } = new();
+    public ObservableCollection<DownloadQueue> Queues { get; } = new();
     public AppSettings Settings { get; private set; }
     public event Action<DownloadRecord>? Finished;
+    public event Action<string, string>? Notify;
+    public event Action<string>? ClipboardLink;
+    public event Action? QuitRequested;
 
     readonly Dictionary<Guid, Transfer> transfers = new();
+    readonly HashSet<string> queuesWithWork = new();
     readonly SpeedLimiter limiter = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    uint clipboardSequence = GetClipboardSequenceNumber();
+    string lastMinute = "";
     int ticks;
+
+    [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
 
     public DownloadManager()
     {
         Settings = Load<AppSettings>(AppPaths.Settings) ?? new AppSettings();
+        foreach (var q in Load<List<DownloadQueue>>(AppPaths.Queues) ?? new()) Queues.Add(q);
+        if (!Queues.Any(q => q.IsMain)) Queues.Insert(0, DownloadQueue.Main());
         foreach (var r in Load<List<DownloadRecord>>(AppPaths.Downloads) ?? new())
         {
             if (r.IsActive) r.Status = DownloadStatus.Queued;
-            Rows.Add(new Row(r));
+            Rows.Add(new Row(r, QueueName));
         }
         limiter.SetLimit(Settings.SpeedLimitKBps * 1024);
         timer.Tick += (_, _) => Tick();
@@ -37,34 +62,71 @@ public sealed class DownloadManager
     {
         Settings = s;
         limiter.SetLimit(s.SpeedLimitKBps * 1024);
-        File.WriteAllText(AppPaths.Settings, JsonSerializer.Serialize(s));
+        Write(AppPaths.Settings, s);
         Schedule();
     }
 
-    public void AddLinks(string text)
+    // ---- adding ----
+
+    public int AddLinks(string text, AddOptions? o = null)
     {
-        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            Add(new DownloadJob(line));
+        o ??= new AddOptions();
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var n = 0;
+        foreach (var line in lines)
+        {
+            var job = new DownloadJob(line, lines.Length == 1 && !string.IsNullOrWhiteSpace(o.FileName) ? o.FileName : null);
+            if (job.IsValid) { Add(job, o); n++; }
+        }
+        return n;
     }
 
-    public void Add(DownloadJob job)
+    public void Add(DownloadJob job, AddOptions? o = null)
     {
         if (!job.IsValid) return;
+        o ??= new AddOptions();
+        var name = job.FileName is { Length: > 0 } n ? FileNames.Sanitize(n) : FileNames.FromUrl(job.Url);
+        // A link the user asked to refresh: keep what is downloaded and continue from the new address.
+        if (Rows.FirstOrDefault(r => r.Record.AwaitingRefresh == true && r.Record.FileName == name) is { } waiting)
+        {
+            var w = waiting.Record;
+            w.Url = job.Url;
+            w.Cookies = job.Cookies ?? w.Cookies;
+            w.Referrer = job.Referrer ?? w.Referrer;
+            w.AwaitingRefresh = null;
+            w.Status = DownloadStatus.Queued;
+            w.Error = null;
+            waiting.Refresh();
+            Save();
+            Schedule();
+            return;
+        }
+        var limit = job.SpeedLimitKBps ?? o.SpeedLimitKBps;
         var rec = new DownloadRecord
         {
             Url = job.Url, Referrer = job.Referrer, Cookies = job.Cookies, UserAgent = job.UserAgent,
-            Folder = Settings.Folder,
-            FileName = job.FileName is { Length: > 0 } n ? FileNames.Sanitize(n) : FileNames.FromUrl(job.Url),
+            Folder = job.Folder ?? o.Folder ?? Settings.Folder,
+            FileName = name,
+            QueueId = job.Queue is { Length: > 0 } qn ? QueueIdNamed(qn) : o.QueueId,
+            Username = job.Username ?? NullIfEmpty(o.Username),
+            Password = job.Password ?? NullIfEmpty(o.Password),
+            Checksum = job.Checksum ?? NullIfEmpty(o.Checksum),
+            SpeedLimitKBps = limit > 0 ? limit : null,
+            Status = job.Start ?? o.Start ? DownloadStatus.Queued : DownloadStatus.Paused,
         };
-        Rows.Insert(0, new Row(rec));
+        Rows.Insert(0, new Row(rec, QueueName));
         Schedule();
         Save();
     }
+
+    static string? NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
 
     public void CollectInbox()
     {
         foreach (var j in new Inbox().Collect()) Add(j);
     }
+
+    // ---- control ----
 
     public void Pause(Row row)
     {
@@ -81,6 +143,7 @@ public sealed class DownloadManager
             row.Record.Status = DownloadStatus.Queued;
             row.Record.Error = null;
         }
+        if (Queues.FirstOrDefault(q => q.Id == row.Record.Queue) is { Running: false } queue) queue.Running = true;
         row.Refresh();
         Schedule();
     }
@@ -95,44 +158,278 @@ public sealed class DownloadManager
     }
 
     public void PauseAll() { foreach (var r in Rows.ToList()) if (r.Record.IsActive || r.Record.Status == DownloadStatus.Queued) Pause(r); }
-    public void ResumeAll() { foreach (var r in Rows.ToList()) if (r.Record.Status == DownloadStatus.Paused) Resume(r); }
+    public void ResumeAll() { foreach (var r in Rows.ToList()) if (r.Record.Status is DownloadStatus.Paused or DownloadStatus.Failed) Resume(r); }
     public void ClearFinished() { foreach (var r in Rows.Where(r => r.Record.Status == DownloadStatus.Finished).ToList()) Remove(r); }
 
-    void Schedule()
+    /// <summary>Continues from a new address (or waits for one from the browser), keeping what is downloaded.</summary>
+    public void Refresh(Row row, string? link)
     {
-        var slots = Math.Max(1, Settings.MaxActive) - transfers.Count;
-        foreach (var row in Rows.Reverse().Where(r => r.Record.Status == DownloadStatus.Queued).ToList())
+        if (transfers.Remove(row.Record.Id, out var t)) t.Pause();
+        var r = row.Record;
+        if (link != null && new DownloadJob(link).IsValid)
         {
-            if (slots-- <= 0) break;
-            var t = new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders);
-            transfers[row.Record.Id] = t;
-            row.Record.Status = DownloadStatus.Probing;
-            t.Changed += rec => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Changed(row, rec));
-            _ = t.StartAsync();
+            r.Url = link.Trim();
+            r.AwaitingRefresh = null;
+            r.Status = DownloadStatus.Queued;
+            r.Error = null;
+        }
+        else
+        {
+            r.AwaitingRefresh = true;
+            r.Status = DownloadStatus.Paused;
+            r.Error = "Waiting for a fresh link from the browser";
+        }
+        row.Refresh();
+        Save();
+        Schedule();
+    }
+
+    public void SetDetails(Row row, string username, string password, string checksum, int limitKBps, string queueId)
+    {
+        var r = row.Record;
+        r.Username = NullIfEmpty(username);
+        r.Password = NullIfEmpty(password);
+        r.Checksum = NullIfEmpty(checksum);
+        r.SpeedLimitKBps = limitKBps > 0 ? limitKBps : null;
+        r.QueueId = queueId;
+        if (transfers.TryGetValue(r.Id, out var t)) t.OwnLimiter.SetLimit(Math.Max(0, limitKBps) * 1024);
+        row.Refresh();
+        Save();
+        Schedule();
+    }
+
+    public string Verify(Row row, string expected)
+    {
+        if (row.Record.SavedPath is not { } path || !File.Exists(path)) return "The file is not downloaded yet";
+        if (Nexonic.Core.Checksum.Parse(expected) == null) return "Paste an MD5, SHA-1, SHA-256 or SHA-512 value";
+        var result = Nexonic.Core.Checksum.Verify(expected, path);
+        row.Record.Checksum = expected;
+        row.Record.ChecksumResult = result;
+        row.Refresh();
+        Save();
+        return result;
+    }
+
+    // ---- queues and scheduler ----
+
+    public string QueueName(string id) => Queues.FirstOrDefault(q => q.Id == id)?.Name ?? "Main queue";
+
+    string QueueIdNamed(string name)
+    {
+        if (Queues.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase)) is { } found) return found.Id;
+        var q = new DownloadQueue { Name = name, Running = true };
+        Queues.Add(q);
+        SaveQueues();
+        return q.Id;
+    }
+
+    public DownloadQueue NewQueue()
+    {
+        var n = Queues.Count + 1;
+        while (Queues.Any(q => q.Name == $"Queue {n}")) n++;
+        var queue = new DownloadQueue { Name = $"Queue {n}" };
+        Queues.Add(queue);
+        SaveQueues();
+        return queue;
+    }
+
+    public void DeleteQueue(DownloadQueue q)
+    {
+        if (q.IsMain) return;
+        foreach (var r in Rows.Where(r => r.Record.QueueId == q.Id)) { r.Record.QueueId = null; r.Refresh(); }
+        Queues.Remove(q);
+        SaveQueues();
+        Save();
+        Schedule();
+    }
+
+    public void StartQueue(string id)
+    {
+        if (Queues.FirstOrDefault(q => q.Id == id) is not { } queue) return;
+        queue.Running = true;
+        foreach (var row in Rows.Where(r => r.Record.Queue == id && r.Record.AwaitingRefresh != true &&
+                                            r.Record.Status is DownloadStatus.Paused or DownloadStatus.Failed))
+        {
+            row.Record.Status = DownloadStatus.Queued;
+            row.Record.Error = null;
+            row.Refresh();
+        }
+        SaveQueues();
+        Save();
+        Schedule();
+    }
+
+    public void StopQueue(string id)
+    {
+        if (Queues.FirstOrDefault(q => q.Id == id) is not { } queue) return;
+        queue.Running = false;
+        foreach (var row in Rows.Where(r => r.Record.Queue == id && r.Record.IsActive).ToList())
+        {
+            if (transfers.Remove(row.Record.Id, out var t)) t.Pause();
+            row.Record.Status = DownloadStatus.Queued; // waits for the queue to start again
+            row.Refresh();
+        }
+        SaveQueues();
+        Save();
+    }
+
+    public void SaveQueues() => Write(AppPaths.Queues, Queues.ToList());
+
+    void RunTimetable()
+    {
+        var now = DateTime.Now;
+        var minute = QueueClock.HhMm(now);
+        if (minute == lastMinute) return;
+        lastMinute = minute;
+        foreach (var q in Queues.ToList())
+        {
+            if (QueueClock.ShouldStart(q, now))
+            {
+                StartQueue(q.Id);
+                q.LastStartDay = QueueClock.DayKey(now);
+                SaveQueues();
+            }
+            else if (QueueClock.ShouldStop(q, now)) StopQueue(q.Id);
         }
     }
 
-    void Changed(Row row, DownloadRecord rec)
+    void CheckQueuesDone()
+    {
+        foreach (var q in Queues.Where(q => q.Running).ToList())
+        {
+            var busy = Rows.Any(r => r.Record.Queue == q.Id && (r.Record.IsActive || r.Record.Status == DownloadStatus.Queued));
+            if (busy) { queuesWithWork.Add(q.Id); continue; }
+            if (!queuesWithWork.Remove(q.Id)) continue;
+            if (!q.IsMain) { q.Running = false; SaveQueues(); }
+            AfterQueue(q);
+        }
+    }
+
+    void AfterQueue(DownloadQueue q)
+    {
+        switch (q.AfterDone)
+        {
+            case Nexonic.Core.AfterQueue.Quit:
+                Save();
+                QuitRequested?.Invoke();
+                break;
+            case Nexonic.Core.AfterQueue.Sleep:
+                Notify?.Invoke("Queue finished", $"{q.Name} is done. The computer will sleep now.");
+                System.Windows.Forms.Application.SetSuspendState(System.Windows.Forms.PowerState.Suspend, false, false);
+                break;
+            case Nexonic.Core.AfterQueue.ShutDown:
+                Save();
+                Notify?.Invoke("Queue finished", $"{q.Name} is done. Windows shuts down in one minute (shutdown /a cancels).");
+                try { Process.Start(new ProcessStartInfo("shutdown", "/s /t 60") { CreateNoWindow = true, UseShellExecute = false }); } catch { }
+                break;
+        }
+    }
+
+    void Schedule()
+    {
+        foreach (var q in Queues.Where(q => q.Running).ToList())
+        {
+            var limit = q.IsMain ? Settings.MaxActive : q.MaxActive;
+            var slots = Math.Max(1, limit) - transfers.Values.Count(t => t.Record.Queue == q.Id);
+            foreach (var row in Rows.Reverse().Where(r => r.Record.Queue == q.Id && r.Record.Status == DownloadStatus.Queued).ToList())
+            {
+                if (slots-- <= 0) break;
+                var t = new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy);
+                transfers[row.Record.Id] = t;
+                row.Record.Status = DownloadStatus.Probing;
+                t.Changed += rec => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Changed(row, rec, t));
+                _ = t.StartAsync();
+            }
+        }
+    }
+
+    void Changed(Row row, DownloadRecord rec, Transfer t)
     {
         row.Refresh();
-        if (rec.Status is DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused && transfers.Remove(rec.Id))
+        if (rec.Status is not (DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused)) return;
+        if (!transfers.TryGetValue(rec.Id, out var current) || current != t) return; // already stopped by the app
+        transfers.Remove(rec.Id);
+        if (rec.Status == DownloadStatus.Finished) AfterDownload(rec);
+        if (rec.Status == DownloadStatus.Failed) Notify?.Invoke("Download failed", $"{rec.FileName}: {rec.Error}");
+        Save();
+        Schedule();
+    }
+
+    // ---- after a download ----
+
+    void AfterDownload(DownloadRecord rec)
+    {
+        if (rec.SavedPath is not { } path) return;
+        if (Settings.MarkDownloads)
         {
-            if (rec.Status == DownloadStatus.Finished) Finished?.Invoke(rec);
-            Save();
-            Schedule();
+            // Mark of the web: Windows checks the file (SmartScreen, Office protected view) as it does for browser downloads.
+            try { File.WriteAllText(path + ":Zone.Identifier", $"[ZoneTransfer]\r\nZoneId=3\r\nHostUrl={rec.Url}\r\n"); } catch { }
         }
+        if (Settings.PlaySound) System.Media.SystemSounds.Asterisk.Play();
+        if (Settings.ScanEnabled) Scan(path);
+        Finished?.Invoke(rec);
+    }
+
+    void Scan(string path)
+    {
+        var words = CommandLineTool.Words(Environment.ExpandEnvironmentVariables(Settings.ScanCommand));
+        if (words.Count == 0) return;
+        var name = Path.GetFileName(path);
+        Task.Run(() =>
+        {
+            bool ok;
+            try
+            {
+                var psi = new ProcessStartInfo(words[0]) { CreateNoWindow = true, UseShellExecute = false };
+                foreach (var w in words.Skip(1)) psi.ArgumentList.Add(w);
+                psi.ArgumentList.Add(path);
+                using var p = Process.Start(psi)!;
+                p.WaitForExit();
+                ok = p.ExitCode == 0;
+            }
+            catch { ok = false; }
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                Notify?.Invoke(ok ? "Virus scan passed" : "Virus scan warning", ok ? name : $"{name}: the scanner reported a problem or could not run"));
+        });
+    }
+
+    // ---- clipboard and timer ----
+
+    void WatchClipboard()
+    {
+        var seq = GetClipboardSequenceNumber();
+        if (seq == clipboardSequence) return;
+        clipboardSequence = seq;
+        if (!Settings.MonitorClipboard) return;
+        string text;
+        try { text = System.Windows.Clipboard.ContainsText() ? System.Windows.Clipboard.GetText() : ""; } catch { return; }
+        if (FileTypes.DownloadLink(text, FileTypes.Parse(Settings.ClipboardTypes)) is { } u && Rows.All(r => r.Record.Url != u.AbsoluteUri && r.Record.Url != text.Trim()))
+            ClipboardLink?.Invoke(u.AbsoluteUri);
     }
 
     void Tick()
     {
         foreach (var r in Rows) if (r.Record.IsActive) r.Tick();
-        if (++ticks % 2 == 0) CollectInbox();
+        WatchClipboard();
+        if (++ticks % 2 == 0)
+        {
+            CollectInbox();
+            RunTimetable();
+            CheckQueuesDone();
+        }
         if (ticks % 4 == 0) Save();
     }
 
-    public void Save()
+    public void Save() => Write(AppPaths.Downloads, Rows.Select(r => r.Record).ToList());
+
+    static void Write<T>(string path, T value)
     {
-        try { File.WriteAllText(AppPaths.Downloads, JsonSerializer.Serialize(Rows.Select(r => r.Record).ToList())); } catch { }
+        try
+        {
+            Directory.CreateDirectory(AppPaths.Support);
+            File.WriteAllText(path, JsonSerializer.Serialize(value));
+        }
+        catch { }
     }
 
     static T? Load<T>(string path)
@@ -146,39 +443,47 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
 {
     public DownloadRecord Record { get; }
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    readonly Func<string, string> queueName;
     long lastReceived;
-    double speed;
+    public double SpeedBytes { get; private set; }
 
-    public Row(DownloadRecord r) { Record = r; lastReceived = r.Received; }
+    public Row(DownloadRecord r, Func<string, string> queueName)
+    {
+        Record = r;
+        this.queueName = queueName;
+        lastReceived = r.Received;
+    }
 
     public string Name => Record.FileName;
     public string Size => Record.Size is long s ? Bytes(s) : "–";
     public double Percent => Record.Progress * 100;
-    public string Speed => Record.IsActive && speed > 0 ? Bytes((long)speed) + "/s" : "";
-    public string TimeLeft => Record.IsActive && speed > 0 && Record.Size is long s
-        ? TimeSpan.FromSeconds((s - Record.Received) / speed).ToString(@"hh\:mm\:ss") : "";
+    public string Speed => Record.IsActive && SpeedBytes > 0 ? Bytes((long)SpeedBytes) + "/s" : "";
+    public string TimeLeft => Record.IsActive && SpeedBytes > 0 && Record.Size is long s
+        ? TimeSpan.FromSeconds((s - Record.Received) / SpeedBytes).ToString(@"hh\:mm\:ss") : "";
     public string Status => Record.Status switch
     {
         DownloadStatus.Queued => "Queued",
         DownloadStatus.Probing => "Connecting…",
         DownloadStatus.Downloading => $"{Percent:0}%",
-        DownloadStatus.Paused => "Paused",
-        DownloadStatus.Finished => "Finished",
-        _ => "Failed: " + Record.Error,
+        DownloadStatus.Paused => Record.AwaitingRefresh == true ? "Waiting for link" : "Stopped",
+        DownloadStatus.Finished => Record.ChecksumResult?.Contains("not") == true ? "Checksum failed" : "Complete",
+        _ => "Error",
     };
+    public string Queue => queueName(Record.Queue);
+    public string Added => Record.Added.ToString("g");
     public string Category => Record.Category.ToString();
 
     public void Tick()
     {
         var r = Record.Received;
-        speed = Math.Max(0, (r - lastReceived) * 2);
+        SpeedBytes = Math.Max(0, (r - lastReceived) * 2);
         lastReceived = r;
         Refresh();
     }
 
     public void Refresh() => PropertyChanged?.Invoke(this, new(""));
 
-    static string Bytes(long n)
+    public static string Bytes(long n)
     {
         string[] u = { "B", "KB", "MB", "GB", "TB" };
         double v = n;

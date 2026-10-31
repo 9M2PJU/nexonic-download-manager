@@ -2,7 +2,7 @@
 
 export const HOST = "com.nexonic.downloadmanager";
 
-export const DEFAULTS = { enabled: true, minSizeMB: 1, skipTypes: "" };
+export const DEFAULTS = { enabled: true, minSizeMB: 1, skipTypes: "", videoButton: true };
 
 export function extensionOf(name) {
   const clean = String(name || "").split(/[?#]/)[0];
@@ -34,4 +34,66 @@ export function shouldTakeOver(item, settings) {
 
 export function cookieHeader(cookies) {
   return (cookies || []).map((c) => `${c.name}=${c.value}`).join("; ");
+}
+
+export const MEDIA_TYPES = ["mp4", "m4v", "webm", "mkv", "mov", "flv", "avi", "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac"];
+// Streaming playlists and their small pieces cannot be saved as one file yet.
+const STREAM_TYPES = ["m3u8", "mpd", "ts", "m4s"];
+
+export function header(headers, name) {
+  const h = (headers || []).find((x) => x.name.toLowerCase() === name);
+  return h ? h.value : "";
+}
+
+/** Is this network response a whole audio or video file worth offering? */
+export function isMedia(url, contentType, length) {
+  if (!/^https?:\/\//i.test(url || "")) return false;
+  const ext = extensionOf(url);
+  const type = String(contentType || "").toLowerCase();
+  if (STREAM_TYPES.includes(ext) || /mpegurl|dash\+xml|mp2t/.test(type)) return false;
+  if (length >= 0 && length < 300 * 1024) return false;
+  return /^(video|audio)\//.test(type) || MEDIA_TYPES.includes(ext);
+}
+
+export function nameFromUrl(url) {
+  try {
+    const base = decodeURIComponent(new URL(url).pathname.split("/").pop() || "");
+    return base || "download";
+  } catch (_) {
+    return "download";
+  }
+}
+
+export function formatSize(bytes) {
+  if (!(bytes > 0)) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+/** Keeps web links whose file type is listed (all file links when the list is empty), without duplicates. */
+export function filterLinks(links, typesText) {
+  const types = parseTypes(typesText);
+  const seen = new Set();
+  const out = [];
+  for (const raw of links || []) {
+    const url = String(raw).split("#")[0];
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
+    const ext = extensionOf(url);
+    if (types.length ? !types.includes(ext) : !ext || ["html", "htm", "php", "asp", "aspx"].includes(ext)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
+/** Adds a media item to a tab's list (newest first, no duplicates, at most 30). */
+export function addMedia(list, item) {
+  const rest = (list || []).filter((m) => m.url !== item.url);
+  return [item, ...rest].slice(0, 30);
 }

@@ -1,12 +1,24 @@
 import AppKit
+import CoreServices
 import Foundation
 import NexonicCore
 import UserNotifications
+
+/// What the Add window opens with (from the toolbar, the clipboard or a batch).
+struct AddRequest: Identifiable {
+    let id = UUID()
+    var links: String
+    var queueID: String = DownloadQueue.mainID
+}
 
 @MainActor
 final class DownloadManager: ObservableObject {
     @Published private(set) var items: [DownloadRecord] = []
     @Published private(set) var speeds: [UUID: Double] = [:]  // bytes per second
+    @Published var queues: [DownloadQueue] = [] {
+        didSet { save(queues, to: AppPaths.queues) }
+    }
+    @Published var addRequest: AddRequest?
     @Published var settings: AppSettings {
         didSet {
             limiter.setLimit(bytesPerSecond: settings.speedLimitKBps * 1024)
@@ -17,6 +29,11 @@ final class DownloadManager: ObservableObject {
 
     private var transfers: [UUID: Transfer] = [:]
     private var lastReceived: [UUID: Int64] = [:]
+    private var requeue: Set<UUID> = []
+    private var pendingRefresh: [UUID: String?] = [:]
+    private var queuesWithWork: Set<String> = []
+    private var lastMinute = ""
+    private var clipboardCount = NSPasteboard.general.changeCount
     private let limiter = SpeedLimiter()
     private var timer: Timer?
     private var ticks = 0
@@ -25,6 +42,9 @@ final class DownloadManager: ObservableObject {
         try? FileManager.default.createDirectory(at: AppPaths.support, withIntermediateDirectories: true)
         settings = Self.load(AppSettings.self, from: AppPaths.settings) ?? AppSettings()
         items = Self.load([DownloadRecord].self, from: AppPaths.downloads) ?? []
+        var qs = Self.load([DownloadQueue].self, from: AppPaths.queues) ?? []
+        if !qs.contains(where: \.isMain) { qs.insert(.main, at: 0) }
+        queues = qs
         for i in items.indices where items[i].status.isActive { items[i].status = .queued }  // interrupted by quit
         limiter.setLimit(bytesPerSecond: settings.speedLimitKBps * 1024)
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -39,21 +59,60 @@ final class DownloadManager: ObservableObject {
 
     // MARK: adding
 
-    func add(links text: String, folder: URL? = nil) {
-        for line in text.split(whereSeparator: \.isNewline) {
-            let s = line.trimmingCharacters(in: .whitespaces)
-            let job = DownloadJob(url: s)
-            if job.validURL != nil { add(job, folder: folder) }
+    struct AddOptions {
+        var folder: URL?
+        var fileName: String?
+        var queueID: String = DownloadQueue.mainID
+        var start = true
+        var username = ""
+        var password = ""
+        var checksum = ""
+        var speedLimitKBps = 0
+    }
+
+    func add(links text: String, options: AddOptions = AddOptions()) {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        for line in lines {
+            var job = DownloadJob(url: line)
+            if lines.count == 1, let n = options.fileName, !n.isEmpty { job.fileName = n }
+            if job.validURL != nil { add(job, options: options) }
         }
     }
 
-    func add(_ job: DownloadJob, folder: URL? = nil) {
+    func add(_ job: DownloadJob, options o: AddOptions = AddOptions()) {
         guard let url = job.validURL else { return }
-        let record = DownloadRecord(url: url, folder: folder ?? settings.folder, fileName: job.fileName,
-                                    referrer: job.referrer, cookies: job.cookies, userAgent: job.userAgent)
+        let name = job.fileName.map(FileNames.sanitize) ?? FileNames.fromURL(url)
+        // A link the user asked to refresh: keep what is downloaded and continue from the new address.
+        if let i = items.firstIndex(where: { $0.awaitingRefresh == true && $0.fileName == name }) {
+            items[i].url = url
+            items[i].cookies = job.cookies ?? items[i].cookies
+            items[i].referrer = job.referrer ?? items[i].referrer
+            items[i].awaitingRefresh = nil
+            items[i].status = .queued
+            items[i].error = nil
+            persist()
+            schedule()
+            return
+        }
+        let folder = job.folder.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? o.folder ?? settings.folder
+        var record = DownloadRecord(url: url, folder: folder, fileName: job.fileName, referrer: job.referrer,
+                                    cookies: job.cookies, userAgent: job.userAgent)
+        record.queueID = job.queue.map(queueID(named:)) ?? o.queueID
+        record.username = job.username ?? (o.username.isEmpty ? nil : o.username)
+        record.password = job.password ?? (o.password.isEmpty ? nil : o.password)
+        record.checksum = job.checksum ?? (o.checksum.isEmpty ? nil : o.checksum)
+        let limit = job.speedLimitKBps ?? o.speedLimitKBps
+        record.speedLimitKBps = limit > 0 ? limit : nil
+        if !(job.start ?? o.start) { record.status = .paused }
         items.append(record)
         schedule()
         persist()
+    }
+
+    func addBatch(_ pattern: String, options: AddOptions) throws -> Int {
+        let links = try BatchPattern.expand(pattern)
+        add(links: links.joined(separator: "\n"), options: options)
+        return links.count
     }
 
     func collectInbox() {
@@ -65,11 +124,14 @@ final class DownloadManager: ObservableObject {
     // MARK: control
 
     func pause(_ id: UUID) {
-        if let t = transfers[id] { t.pause() } else { update(id) { $0.status = .paused } }
+        if let t = transfers[id] { t.pause() } else { update(id) { if $0.status != .finished { $0.status = .paused } } }
     }
 
     func resume(_ id: UUID) {
         update(id) { if [.paused, .failed].contains($0.status) { $0.status = .queued; $0.error = nil } }
+        if let q = items.first(where: { $0.id == id })?.queue, let i = queues.firstIndex(where: { $0.id == q }), !queues[i].running {
+            queues[i].running = true  // resuming a download starts its queue
+        }
         schedule()
     }
 
@@ -85,7 +147,7 @@ final class DownloadManager: ObservableObject {
     }
 
     func pauseAll() { for i in items where i.status.isActive || i.status == .queued { pause(i.id) } }
-    func resumeAll() { for i in items where i.status == .paused { resume(i.id) } }
+    func resumeAll() { for i in items where i.status == .paused || i.status == .failed { resume(i.id) } }
     func clearFinished() { for i in items where i.status == .finished { remove(i.id) } }
 
     func reveal(_ id: UUID) {
@@ -98,34 +160,250 @@ final class DownloadManager: ObservableObject {
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
-    // MARK: queue
+    /// Continues from a new address, keeping what is already downloaded.
+    func refresh(_ id: UUID, with link: String?) {
+        if let t = transfers[id] {
+            pendingRefresh[id] = .some(link)  // applied once the transfer has stopped
+            t.pause()
+            return
+        }
+        update(id) { r in
+            if let link, let u = DownloadJob(url: link).validURL {
+                r.url = u
+                r.awaitingRefresh = nil
+                r.status = .queued
+                r.error = nil
+            } else {
+                r.awaitingRefresh = true  // the next browser download with this file name continues it
+                r.status = .paused
+                r.error = "Waiting for a fresh link from the browser"
+            }
+        }
+        schedule()
+    }
+
+    func setDetails(_ id: UUID, username: String, password: String, checksum: String, speedLimitKBps: Int, queueID: String) {
+        update(id) { r in
+            r.username = username.isEmpty ? nil : username
+            r.password = password.isEmpty ? nil : password
+            r.checksum = checksum.isEmpty ? nil : checksum
+            r.speedLimitKBps = speedLimitKBps > 0 ? speedLimitKBps : nil
+            r.queueID = queueID
+        }
+        transfers[id]?.ownLimiter.setLimit(bytesPerSecond: max(0, speedLimitKBps) * 1024)
+        schedule()
+    }
+
+    func verify(_ id: UUID, expected: String) -> String {
+        guard let r = items.first(where: { $0.id == id }), let path = r.savedPath else { return "The file is not downloaded yet" }
+        guard let (algorithm, hex) = Checksum.parse(expected) else { return "Paste an MD5, SHA-1, SHA-256 or SHA-512 value" }
+        guard let actual = try? Checksum.compute(algorithm, file: URL(fileURLWithPath: path)) else { return "The file could not be read" }
+        let result = actual == hex ? "\(algorithm.rawValue) matches" : "\(algorithm.rawValue) does not match (got \(actual))"
+        update(id) { $0.checksum = expected; $0.checksumResult = result }
+        return result
+    }
+
+    // MARK: queues and scheduler
+
+    func queueName(_ id: String) -> String { queues.first { $0.id == id }?.name ?? "Main queue" }
+
+    private func queueID(named name: String) -> String {
+        if let q = queues.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return q.id }
+        let q = DownloadQueue(name: name, running: true)
+        queues.append(q)
+        return q.id
+    }
+
+    func newQueue() -> String {
+        var n = queues.count + 1
+        while queues.contains(where: { $0.name == "Queue \(n)" }) { n += 1 }
+        let q = DownloadQueue(name: "Queue \(n)")
+        queues.append(q)
+        return q.id
+    }
+
+    func deleteQueue(_ id: String) {
+        guard id != DownloadQueue.mainID else { return }
+        for i in items.indices where items[i].queueID == id { items[i].queueID = nil }
+        queues.removeAll { $0.id == id }
+        persist()
+        schedule()
+    }
+
+    func startQueue(_ id: String) {
+        guard let i = queues.firstIndex(where: { $0.id == id }) else { return }
+        queues[i].running = true
+        for j in items.indices where items[j].queue == id && [.paused, .failed].contains(items[j].status) && items[j].awaitingRefresh != true {
+            items[j].status = .queued
+            items[j].error = nil
+        }
+        persist()
+        schedule()
+    }
+
+    func stopQueue(_ id: String) {
+        guard let i = queues.firstIndex(where: { $0.id == id }) else { return }
+        queues[i].running = false
+        for item in items where item.queue == id && item.status.isActive {
+            requeue.insert(item.id)
+            transfers[item.id]?.pause()
+        }
+    }
+
+    private func runTimetable() {
+        let now = Date()
+        let minute = QueueClock.hhmm(now)
+        guard minute != lastMinute else { return }
+        lastMinute = minute
+        for q in queues {
+            if QueueClock.shouldStart(q, at: now) {
+                startQueue(q.id)
+                if let i = queues.firstIndex(where: { $0.id == q.id }) { queues[i].lastStartDay = QueueClock.dayKey(now) }
+            } else if QueueClock.shouldStop(q, at: now) {
+                stopQueue(q.id)
+            }
+        }
+    }
+
+    private func checkQueuesDone() {
+        for q in queues where q.running {
+            let busy = items.contains { $0.queue == q.id && ($0.status.isActive || $0.status == .queued) }
+            if busy { queuesWithWork.insert(q.id); continue }
+            guard queuesWithWork.remove(q.id) != nil else { continue }
+            if !q.isMain, let i = queues.firstIndex(where: { $0.id == q.id }) { queues[i].running = false }
+            afterQueue(q)
+        }
+    }
+
+    private func afterQueue(_ q: DownloadQueue) {
+        switch q.afterDone {
+        case .nothing:
+            return
+        case .quit:
+            persist()
+            NSApp.terminate(nil)
+        case .sleep:
+            post("Queue finished", "\(q.name) is done. The Mac will sleep now.")
+            run("/usr/bin/pmset", ["sleepnow"])
+        case .shutDown:
+            persist()
+            post("Queue finished", "\(q.name) is done. Shutting down.")
+            var error: NSDictionary?
+            NSAppleScript(source: "tell application \"System Events\" to shut down")?.executeAndReturnError(&error)
+        }
+    }
 
     private func schedule() {
-        let active = items.filter { $0.status.isActive }.count
-        var slots = max(1, settings.maxActive) - active
-        for item in items where item.status == .queued && slots > 0 {
-            slots -= 1
-            let t = Transfer(record: item, connections: settings.connections, limiter: limiter,
-                             sortIntoCategories: settings.sortIntoCategoryFolders)
-            t.onChange = { [weak self] rec in Task { @MainActor in self?.changed(rec) } }
-            transfers[item.id] = t
-            update(item.id) { $0.status = .probing }
-            t.start()
+        for q in queues where q.running {
+            let limit = q.isMain ? settings.maxActive : q.maxActive
+            var slots = max(1, limit) - items.filter { $0.queue == q.id && $0.status.isActive }.count
+            for item in items where item.queue == q.id && item.status == .queued && slots > 0 && transfers[item.id] == nil {
+                slots -= 1
+                let t = Transfer(record: item, connections: settings.connections, limiter: limiter,
+                                 sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
+                t.onChange = { [weak self] rec in Task { @MainActor in self?.changed(rec) } }
+                transfers[item.id] = t
+                update(item.id) { $0.status = .probing }
+                t.start()
+            }
         }
     }
 
     private func changed(_ rec: DownloadRecord) {
         guard let i = items.firstIndex(where: { $0.id == rec.id }) else { return }
         let before = items[i].status
+        var rec = rec
+        // Fields edited in the app while the transfer runs stay as edited.
+        rec.queueID = items[i].queueID
+        rec.speedLimitKBps = items[i].speedLimitKBps
+        if rec.status == .paused, requeue.remove(rec.id) != nil { rec.status = .queued }
         items[i] = rec
-        if before != rec.status, [.finished, .failed, .paused].contains(rec.status) {
+        if rec.status == .paused, let link = pendingRefresh.removeValue(forKey: rec.id) {
             transfers.removeValue(forKey: rec.id)
-            if rec.status == .finished { notifyDone(rec) }
-            if rec.status == .failed { notifyFailed(rec) }
+            refresh(rec.id, with: link)
+            return
+        }
+        if before != rec.status, [.finished, .failed, .paused, .queued].contains(rec.status) {
+            transfers.removeValue(forKey: rec.id)
+            if rec.status == .finished { finished(rec) }
+            if rec.status == .failed { post("Download failed", "\(rec.fileName): \(rec.error ?? "")") }
             persist()
             schedule()
         }
     }
+
+    // MARK: after a download
+
+    private func finished(_ rec: DownloadRecord) {
+        guard let path = rec.savedPath else { return }
+        let file = URL(fileURLWithPath: path)
+        if settings.markDownloads { markAsDownloaded(file, from: rec.url) }
+        if settings.playSound { NSSound(named: "Glass")?.play() }
+        var body = rec.fileName
+        if let c = rec.checksumResult { body += " – \(c)" }
+        post("Download finished", body)
+        if settings.scanEnabled { scan(file) }
+        if settings.showCompleteDialog { CompleteWindow.show(rec, manager: self) }
+    }
+
+    /// Lets macOS check the file the first time it is opened, as it does for browser downloads.
+    private func markAsDownloaded(_ file: URL, from source: URL) {
+        var values = URLResourceValues()
+        values.quarantineProperties = [
+            kLSQuarantineAgentNameKey as String: "Nexonic Download Manager",
+            kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String,
+            kLSQuarantineDataURLKey as String: source.absoluteString,
+        ]
+        var f = file
+        try? f.setResourceValues(values)
+    }
+
+    private func scan(_ file: URL) {
+        var words = CommandLineTool.words(settings.scanCommand)
+        guard !words.isEmpty else { return }
+        let exe = words.removeFirst()
+        let args = words + [file.path]
+        let name = file.lastPathComponent
+        DispatchQueue.global().async {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: exe)
+            p.arguments = args
+            let ok: Bool
+            do {
+                try p.run()
+                p.waitUntilExit()
+                ok = p.terminationStatus == 0
+            } catch {
+                ok = false
+            }
+            Task { @MainActor in
+                self.post(ok ? "Virus scan passed" : "Virus scan warning",
+                          ok ? name : "\(name): the scanner reported a problem or could not run")
+            }
+        }
+    }
+
+    private func run(_ path: String, _ args: [String]) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        try? p.run()
+    }
+
+    // MARK: clipboard
+
+    private func watchClipboard() {
+        let pb = NSPasteboard.general
+        guard pb.changeCount != clipboardCount else { return }
+        clipboardCount = pb.changeCount
+        guard settings.monitorClipboard, addRequest == nil, let text = pb.string(forType: .string),
+              let url = FileTypes.downloadLink(in: text, types: FileTypes.parse(settings.clipboardTypes)),
+              !items.contains(where: { $0.url == url }) else { return }
+        addRequest = AddRequest(links: url.absoluteString)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: timer
 
     private func update(_ id: UUID, _ change: (inout DownloadRecord) -> Void) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
@@ -144,7 +422,12 @@ final class DownloadManager: ObservableObject {
         speeds = s
         let active = items.filter { $0.status.isActive }.count
         NSApp.dockTile.badgeLabel = active > 0 ? "\(active)" : nil
-        if ticks % 2 == 0 { collectInbox() }
+        watchClipboard()
+        if ticks % 2 == 0 {
+            collectInbox()
+            runTimetable()
+            checkQueuesDone()
+        }
         if ticks % 4 == 0 { persist() }
     }
 
@@ -159,20 +442,12 @@ final class DownloadManager: ObservableObject {
 
     // MARK: notifications and storage
 
-    private func notifyDone(_ rec: DownloadRecord) {
+    func post(_ title: String, _ body: String) {
         guard settings.notifications else { return }
         let c = UNMutableNotificationContent()
-        c.title = "Download finished"
-        c.body = rec.fileName
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: rec.id.uuidString, content: c, trigger: nil))
-    }
-
-    private func notifyFailed(_ rec: DownloadRecord) {
-        guard settings.notifications else { return }
-        let c = UNMutableNotificationContent()
-        c.title = "Download failed"
-        c.body = "\(rec.fileName): \(rec.error ?? "")"
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: rec.id.uuidString, content: c, trigger: nil))
+        c.title = title
+        c.body = body
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
     }
 
     private func persist() { save(items, to: AppPaths.downloads) }
@@ -180,6 +455,7 @@ final class DownloadManager: ObservableObject {
     private func save<T: Encodable>(_ value: T, to url: URL) {
         guard let data = try? JSONEncoder().encode(value) else { return }
         try? data.write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)  // may hold passwords
     }
 
     private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
