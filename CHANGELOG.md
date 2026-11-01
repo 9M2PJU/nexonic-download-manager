@@ -1,3 +1,10 @@
+## 0.2.1
+
+- Cleaner, more professional windows on Mac and Windows: the system's file icons in the list, coloured status dots,
+  item counts in the sidebar, a search box, a status bar with totals and speed, and a helpful empty view.
+- Release files now keep the same names, so the download links in the README always fetch the newest version.
+- README: direct downloads and step-by-step setup for Mac, Windows, Chrome-type browsers and Firefox.
+
 ## 0.2.0
 
 The Mac and Windows apps now have the same features and toolbar, and there is a Firefox add-on.

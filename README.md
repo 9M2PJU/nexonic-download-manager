@@ -1,89 +1,111 @@
+<div align="center">
+
 # Nexonic Download Manager
 
-**A fast, free download manager for macOS and Windows, with a browser extension.** Files download over many connections at once,
-pause and resume (even after a restart), and land sorted by type.
+**Fast, free download manager for Mac and Windows, with browser extensions for Chrome, Edge, Brave and Firefox.**
+
+Splits every download into up to 32 connections · pauses and resumes, even after a restart · queues and a scheduler ·
+catches downloads and videos from your browser
 
 [![CI](https://github.com/Shahrukhalid/nexonic-download-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Shahrukhalid/nexonic-download-manager/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Shahrukhalid/nexonic-download-manager?label=download)](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black)
 ![Windows 10+](https://img.shields.io/badge/Windows-10%2B-0078D6)
-![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-## Features
+</div>
 
-The Mac and Windows apps have the same features, windows and toolbar, so the steps below work on both.
+## Download
 
-| Toolbar | What it does |
-|---|---|
-| **Add URL** | Paste one or more links. Choose the file name, folder and queue, add a user name and password, an expected checksum or a speed limit, then **Start Download** or **Download Later**. |
-| **Resume / Stop / Stop All** | Pause and continue at any time, also after quitting the app or restarting the computer. |
-| **Delete / Delete Completed** | Clean up the list (right-click also offers moving the file to the Trash or Recycle Bin). |
-| **Scheduler** | Queues with start and stop times, weekdays, how many files run at once, and what to do when done: quit, sleep or shut down. |
-| **Start Queue / Stop Queue** | Run or stop the queue selected in the sidebar. |
-| **Grabber** | Explores a website section (up to five links deep) and lists its files by type; tick the ones you want. |
-| **Batch** | Numbered series: `https://example.com/img[001-100].jpg`, `[a-z]`, `[0-100:5]`; several ranges multiply. |
-| **Options** | Connections, folders, speed limit, proxy, clipboard, after-download actions, browsers and the command line. |
+| Your computer | Download | Size |
+|---|---|---|
+| **Mac** (Apple silicon and Intel, macOS 13 or newer) | [**NexonicDownloadManager-Mac.dmg**](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicDownloadManager-Mac.dmg) | about 1 MB |
+| **Windows** 10 or 11, installer (recommended) | [**NexonicDownloadManager-Windows-Setup.exe**](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicDownloadManager-Windows-Setup.exe) | about 70 MB |
+| **Windows**, portable (no install, runs from a folder) | [NexonicDownloadManager-Windows-Portable.zip](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicDownloadManager-Windows-Portable.zip) | about 90 MB |
+| **Chrome, Edge, Brave, Vivaldi, Opera** extension | [NexonicExtension-Chrome.zip](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicExtension-Chrome.zip) (also inside the apps) | small |
+| **Firefox** add-on | [NexonicAddon-Firefox.xpi](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicAddon-Firefox.xpi) (also inside the apps) | small |
 
-- **Fast:** up to 32 connections per file. When a part finishes, its connection takes over half of the largest part
-  still downloading, so every connection stays busy until the end. Failed parts retry on their own.
-- **Queues:** the main queue starts downloads straight away; add more queues (for example "Night") with their own
-  timetable and limit. Move downloads between queues from the right-click menu.
-- **Clipboard:** copy a link to a file (zip, mp4, pdf … the list is yours) and the Add window opens with it.
-- **Refresh Link:** when a link expires, paste a fresh one, or choose **Wait for Browser** and start the download again
-  in the browser. It continues from where it stopped.
-- **Proxy and passwords:** system, HTTP or SOCKS5 proxy (with optional login); per-download user name and password.
-- **Speed limits:** for everything, and for each download (Properties).
-- **After a download:** Download Complete window (Open, Open Folder), a sound, a notification, a checksum check
-  (MD5, SHA-1, SHA-256, SHA-512), an optional virus scan, and the file is marked as downloaded so the system checks it
-  when first opened.
-- **Categories:** Compressed, Documents, Music, Video, Programs, Images; optionally saved into category folders.
-- **Command line:** `ndm` adds downloads from scripts (see below).
-- **Private:** no account, no tracking, nothing sent anywhere except the downloads you start.
+The links always point to the newest version. Older versions and release notes:
+[all releases](https://github.com/Shahrukhalid/nexonic-download-manager/releases).
 
-## Install
+> **Why is the Mac file so much smaller?** macOS already includes everything a Mac app needs to run, so the `.dmg`
+> only holds the app itself. The Windows files carry their own copy of the .NET runtime, so they work on any Windows
+> 10 or 11 PC without installing anything else. Both have exactly the same features.
 
-1. Download the `.dmg` from [Releases](https://github.com/Shahrukhalid/nexonic-download-manager/releases) and drag the
-   app to Applications.
-2. The app is not notarized yet, so macOS asks before the first start:
-   - **macOS 15:** open the app once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
-   - **macOS 13 and 14:** right-click the app, choose **Open**, then **Open** again.
+## Install in 2 minutes
 
-Requires macOS 13 Ventura or newer, on Apple silicon or Intel.
+### Mac
+
+1. Download **NexonicDownloadManager-Mac.dmg** and open it.
+2. Drag **Nexonic Download Manager** onto **Applications**.
+3. Open it from Applications. The first time, macOS asks because the app is not notarized yet:
+   - **macOS 15 or newer:** click **Done**, open **System Settings → Privacy & Security**, scroll down and click
+     **Open Anyway**, then **Open**.
+   - **macOS 13 or 14:** right-click the app, choose **Open**, then **Open** again.
+4. You'll see the app window and a download icon in the menu bar. Closing the window keeps downloads running.
 
 ### Windows
 
-Download `NexonicDownloadManager-Setup-<version>.exe` from Releases and run it (no administrator rights needed), or
-use the portable zip. Windows may show "Windows protected your PC" because the installer is not signed yet: click
-**More info → Run anyway**. Requires Windows 10 or 11 (64-bit). Closing the window keeps downloads running in the tray.
+1. Download **NexonicDownloadManager-Windows-Setup.exe** and run it. No administrator rights are needed.
+2. If Windows shows "Windows protected your PC" (the installer is not signed yet), click **More info → Run anyway**.
+3. Keep **Add the ndm command** ticked if you want the command line, then **Install**.
+4. The app opens; closing the window keeps downloads running in the tray (bottom-right, next to the clock).
 
-## Browser extension and Firefox add-on
+Portable instead: unzip **NexonicDownloadManager-Windows-Portable.zip** anywhere and run `NexonicDownloadManager.exe`.
 
-**Chrome, Edge, Brave, Vivaldi, Opera** (version 116 or newer):
+### Browser (so downloads from websites go to the app)
 
-1. Open the app once (this connects it to the installed browsers).
-2. Mac: **Options → Browsers & Command Line → Save Extension Folder…** (or the **Browser Extension** folder on the
-   `.dmg`). Windows: the **Extension** folder inside the app's install folder.
-3. In the browser, open the extensions page, switch on **Developer mode**, click **Load unpacked** and select that folder.
+Open the app once first, so the browser can find it.
 
-**Firefox** (version 121 or newer): use `NexonicFirefoxAddon-<version>.xpi` from Releases (also inside the app: Mac
-**Options → Browsers & Command Line → Save Firefox Add-on…**, Windows `Firefox Add-on.xpi` in the install folder).
-Firefox only installs signed add-ons: upload the `.xpi` once to Mozilla's add-on developer hub as a self-distributed
-("On your own") add-on and install the signed file it returns. Firefox Developer Edition and Nightly can also load it
-unsigned for testing (about:debugging → Load Temporary Add-on).
+**Chrome, Edge, Brave, Vivaldi, Opera**
 
-What the extension does:
+1. Get the extension folder: Mac **Options → Browsers & Command Line → Save Extension Folder…**; Windows: the
+   **Extension** folder in the install folder (**Options → Browsers & Command Line → Open the App Folder**). You can
+   also unzip **NexonicExtension-Chrome.zip**.
+2. In the browser go to the extensions page (`chrome://extensions`, `edge://extensions`, `brave://extensions`).
+3. Switch on **Developer mode** (top right), click **Load unpacked** and pick the folder.
+4. Pin the Nexonic icon. Its popup says **Connected to the app** when everything works.
 
-- Downloads you start in the browser open in the app, including ones that need you to be signed in.
-- **Download this video:** a button appears over audio and video players. If the player streams in many small pieces
-  (common on large video sites), the button lists the whole files the page has loaded, when there are any.
-- The popup lists **media on this page** and **links on this page** (filter by type, tick, Download or Download later).
-- Right-click: **Download with Nexonic** on a link, video or audio, and **Download all links with Nexonic** on a page
-  or selection.
-- If the app can't be reached, the browser finishes the download itself.
+**Firefox**
 
-It asks for: downloads, native messaging (to talk to the app), context menus, storage (its settings), cookies, tabs,
-scripting and web requests (to find links and media on the page) and all sites. Cookies are only sent to the site the
-download comes from.
+Firefox only installs signed add-ons. To sign your copy once: upload **NexonicAddon-Firefox.xpi** to Mozilla's
+add-on developer hub as a self-distributed ("On your own") add-on, then drag the signed `.xpi` it gives back onto a
+Firefox window. For a quick test without signing: `about:debugging` → **This Firefox** → **Load Temporary Add-on…**
+(it stays until Firefox restarts).
+
+## Using it
+
+| To | Do this |
+|---|---|
+| Download a link | **Add URL** (or Ctrl/⌘+N), paste one or more links, **Start Download**. |
+| Download from a website | Just click the download link in the browser; the app takes it over. |
+| Save a video or song from a page | Point at the player and click **Download this video**, or open the extension popup → **Media on this page**. |
+| Get many files from one page | Extension popup → **Links on this page** → type the file types → tick → **Download**. |
+| Download a numbered series | **Batch** → `https://example.com/img[001-100].jpg`. |
+| Download a whole folder of a site | **Grabber** → start page, depth, file types → **Explore** → **Download Checked**. |
+| Download at night | **Scheduler** → **New Queue** → set **Start at**, days and **When the queue is done**; add downloads with **Download Later** into that queue. |
+| Continue an expired link | Right-click → **Refresh Link…** → paste the new link, or **Wait for Browser** and start the download again in the browser. |
+| Check a file | Add the expected checksum in **Add URL** or **Properties**; it is checked when the download finishes. |
+| Limit speed | **Options → Connection** for everything; **Properties** for one download. |
+
+The toolbar is the same on Mac and Windows: **Add URL · Resume · Stop · Stop All · Delete · Delete Completed ·
+Scheduler · Start Queue · Stop Queue · Grabber · Batch · Options**, plus a search box. The sidebar groups downloads by
+state, file type and queue, and the status bar shows how many are running and the total speed.
+
+## Features
+
+- **Fast:** up to 32 connections per file. When a part finishes, its connection takes over half of the largest part
+  still downloading, so every connection stays busy until the end. Failed parts retry on their own.
+- **Pause and resume** at any time, also after quitting or restarting. If the server changed the file, the download
+  starts over instead of producing a broken file.
+- **Queues and scheduler:** start and stop times, weekdays, files at the same time, and quit, sleep or shut down when
+  done.
+- **Clipboard:** copy a link to a file (zip, mp4, pdf … the list is yours) and the Add window opens with it.
+- **Proxy and passwords:** system, HTTP or SOCKS5 proxy (with optional login); per-download user name and password.
+- **After a download:** Download Complete window (Open, Open Folder), sound, notification, checksum (MD5, SHA-1,
+  SHA-256, SHA-512), optional virus scan, and the file is marked as downloaded so the system checks it when opened.
+- **Categories:** Compressed, Documents, Music, Video, Programs, Images; optionally saved into category folders.
+- **Private:** no account, no tracking, nothing sent anywhere except the downloads you start.
 
 ## Command line
 
@@ -97,6 +119,14 @@ ndm batch "https://example.com/img[001-100].jpg" --folder ~/Pictures
 ndm https://example.com/private.zip --user me --password secret --checksum <sha256> --limit 500
 ndm help
 ```
+
+## Troubleshooting
+
+- **The extension popup says the app is not reachable:** open the app once, then restart the browser.
+- **A download fails with "link has expired":** use **Refresh Link…** (right-click the download).
+- **A site only allows one connection:** the details panel shows "Resume: no"; the download still works, just
+  without splitting.
+- **Firefox says the add-on is corrupt or unverified:** it needs signing first (see above).
 
 ## Build from source
 

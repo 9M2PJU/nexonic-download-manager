@@ -470,6 +470,15 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
         _ => "Error",
     };
     public string Queue => queueName(Record.Queue);
+    public System.Windows.Media.ImageSource? Icon => FileIcon.For(Record.FileName);
+    public System.Windows.Media.Brush StatusBrush => Record.Status switch
+    {
+        DownloadStatus.Downloading or DownloadStatus.Probing => Theme.Accent,
+        DownloadStatus.Queued => Theme.Waiting,
+        DownloadStatus.Paused => Theme.Idle,
+        DownloadStatus.Finished => Record.ChecksumResult?.Contains("not") == true ? Theme.Bad : Theme.Good,
+        _ => Theme.Bad,
+    };
     public string Added => Record.Added.ToString("g");
     public string Category => Record.Category.ToString();
 
@@ -490,5 +499,66 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
         var i = 0;
         while (v >= 1024 && i < u.Length - 1) { v /= 1024; i++; }
         return $"{v:0.#} {u[i]}";
+    }
+}
+
+public static class Theme
+{
+    static System.Windows.Media.SolidColorBrush B(byte r, byte g, byte b)
+    {
+        var x = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
+        x.Freeze();
+        return x;
+    }
+    public static readonly System.Windows.Media.Brush Accent = B(0x1F, 0x6F, 0xEB);
+    public static readonly System.Windows.Media.Brush Waiting = B(0xD9, 0x82, 0x1E);
+    public static readonly System.Windows.Media.Brush Idle = B(0x8B, 0x94, 0x9E);
+    public static readonly System.Windows.Media.Brush Good = B(0x2D, 0xA4, 0x4E);
+    public static readonly System.Windows.Media.Brush Bad = B(0xCF, 0x22, 0x2E);
+}
+
+/// <summary>The system's own small icon for each file type, cached by extension.</summary>
+public static class FileIcon
+{
+    static readonly Dictionary<string, System.Windows.Media.ImageSource?> cache = new();
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct SHFILEINFO
+    {
+        public IntPtr hIcon;
+        public int iIcon;
+        public uint dwAttributes;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szDisplayName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string szTypeName;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern IntPtr SHGetFileInfo(string path, uint attributes, ref SHFILEINFO info, uint size, uint flags);
+
+    [DllImport("user32.dll")]
+    static extern bool DestroyIcon(IntPtr icon);
+
+    public static System.Windows.Media.ImageSource? For(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        if (cache.TryGetValue(ext, out var found)) return found;
+        System.Windows.Media.ImageSource? image = null;
+        try
+        {
+            var info = new SHFILEINFO();
+            const uint Icon = 0x100, Small = 0x1, UseAttributes = 0x10, Normal = 0x80;
+            SHGetFileInfo("file" + ext, Normal, ref info, (uint)Marshal.SizeOf<SHFILEINFO>(), Icon | Small | UseAttributes);
+            if (info.hIcon != IntPtr.Zero)
+            {
+                var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(info.hIcon, System.Windows.Int32Rect.Empty,
+                    System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                src.Freeze();
+                image = src;
+                DestroyIcon(info.hIcon);
+            }
+        }
+        catch { }
+        cache[ext] = image;
+        return image;
     }
 }

@@ -15,9 +15,14 @@ jobs:
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
+        # Files keep the same names in every release, so the README's direct download links always fetch the latest.
         run: |
-          gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager ${GITHUB_REF_NAME#v}" \
-            --notes-file CHANGELOG.md build/*.dmg build/*.zip build/*.xpi
+          V="$(cat VERSION)"
+          mkdir up
+          cp "build/NexonicDownloadManager-$V.dmg" up/NexonicDownloadManager-Mac.dmg
+          cp "build/NexonicExtension-$V.zip" up/NexonicExtension-Chrome.zip
+          cp "build/NexonicFirefoxAddon-$V.xpi" up/NexonicAddon-Firefox.xpi
+          gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager $V" --notes-file CHANGELOG.md up/*
   windows:
     needs: release
     runs-on: windows-latest
@@ -33,4 +38,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload $env:GITHUB_REF_NAME (Get-ChildItem build\*.exe, build\*-windows-portable.zip | % FullName)
+        run: |
+          $v = (Get-Content VERSION).Trim()
+          Copy-Item "build\NexonicDownloadManager-Setup-$v.exe" build\NexonicDownloadManager-Windows-Setup.exe
+          Copy-Item "build\NexonicDownloadManager-$v-windows-portable.zip" build\NexonicDownloadManager-Windows-Portable.zip
+          gh release upload $env:GITHUB_REF_NAME build\NexonicDownloadManager-Windows-Setup.exe build\NexonicDownloadManager-Windows-Portable.zip

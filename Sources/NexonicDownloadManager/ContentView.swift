@@ -51,8 +51,15 @@ struct ContentView: View {
     @State private var filter: SidebarFilter = .all
     @State private var selection = Set<UUID>()
     @State private var sheet: Sheet?
+    @State private var search = ""
 
-    private var shown: [DownloadRecord] { Array(manager.items.filter(filter.matches).reversed()) }
+    private var shown: [DownloadRecord] {
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        return Array(manager.items.filter { filter.matches($0) && (q.isEmpty || $0.fileName.lowercased().contains(q)
+            || $0.url.absoluteString.lowercased().contains(q)) }.reversed())
+    }
+
+    private func count(_ f: SidebarFilter) -> Int { manager.items.filter(f.matches).count }
     private var currentQueue: String {
         if case .queue(let id) = filter { return id }
         return DownloadQueue.mainID
@@ -63,29 +70,33 @@ struct ContentView: View {
             List(selection: $filter) {
                 Section("Downloads") {
                     ForEach([SidebarFilter.all, .active, .unfinished, .finished], id: \.self) { f in
-                        Label(f.title(manager), systemImage: icon(f)).tag(f)
+                        Label(f.title(manager), systemImage: icon(f)).badge(count(f)).tag(f)
                     }
                 }
                 Section("Categories") {
                     ForEach(FileCategory.allCases, id: \.self) { c in
-                        Label(c.rawValue, systemImage: c.symbol).tag(SidebarFilter.category(c))
+                        Label(c.rawValue, systemImage: c.symbol).badge(count(.category(c))).tag(SidebarFilter.category(c))
                     }
                 }
                 Section("Queues") {
                     ForEach(manager.queues) { q in
-                        Label(q.name, systemImage: q.running ? "play.circle.fill" : "pause.circle").tag(SidebarFilter.queue(q.id))
+                        Label(q.name, systemImage: q.running ? "play.circle.fill" : "pause.circle")
+                            .badge(count(.queue(q.id))).tag(SidebarFilter.queue(q.id))
                     }
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200)
         } detail: {
             VStack(spacing: 0) {
-                table
+                if shown.isEmpty { emptyState } else { table }
                 if selection.count == 1, let id = selection.first, let item = manager.items.first(where: { $0.id == id }) {
                     Divider()
                     DetailPane(item: item, bps: manager.speeds[id] ?? 0, eta: manager.eta(item), queue: manager.queueName(item.queue))
                 }
+                Divider()
+                StatusBar()
             }
+            .searchable(text: $search, placement: .toolbar, prompt: "Search downloads")
             .navigationTitle(filter.title(manager))
             .toolbar { toolbar }
         }
@@ -107,12 +118,22 @@ struct ContentView: View {
 
     private var table: some View {
         Table(shown, selection: $selection) {
-            TableColumn("Name") { r in Label(r.fileName, systemImage: r.category.symbol).lineLimit(1) }
+            TableColumn("Name") { r in
+                HStack(spacing: 6) {
+                    Image(nsImage: FileIcon.image(for: r.fileName)).resizable().frame(width: 16, height: 16)
+                    Text(r.fileName).lineLimit(1).truncationMode(.middle)
+                }
+            }
             TableColumn("Size") { r in Text(r.size.map(bytes) ?? "–") }.width(80)
-            TableColumn("Progress") { r in ProgressView(value: r.progress).progressViewStyle(.linear) }.width(110)
+            TableColumn("Progress") { r in ProgressView(value: r.status == .finished ? 1 : r.progress).progressViewStyle(.linear).tint(r.status == .finished ? .green : brand) }.width(110)
             TableColumn("Speed") { r in Text(r.status.isActive ? speed(manager.speeds[r.id] ?? 0) : "") }.width(90)
             TableColumn("Time Left") { r in Text(r.status.isActive ? manager.eta(r) : "") }.width(70)
-            TableColumn("Status") { r in Text(statusText(r)).foregroundStyle(r.status == .failed ? .red : .secondary) }.width(110)
+            TableColumn("Status") { r in
+                HStack(spacing: 5) {
+                    Circle().fill(statusColor(r)).frame(width: 7, height: 7)
+                    Text(statusText(r)).foregroundStyle(r.status == .failed ? .red : .primary)
+                }
+            }.width(120)
             TableColumn("Queue") { r in Text(manager.queueName(r.queue)).foregroundStyle(.secondary) }.width(90)
             TableColumn("Added") { r in Text(r.added, style: .date).foregroundStyle(.secondary) }.width(90)
         }
@@ -121,6 +142,21 @@ struct ContentView: View {
         } primaryAction: { ids in
             if let id = ids.first { manager.open(id) }
         }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle").font(.system(size: 52, weight: .light)).foregroundStyle(brand)
+            Text(search.isEmpty ? "No downloads here yet" : "Nothing matches “\(search)”").font(.title3.weight(.semibold))
+            Text("Click Add URL, paste a link, drop one on this window, or download from your browser with the extension.")
+                .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
+            Button { sheet = .add(AddRequest(links: clipboardLink(), queueID: currentQueue)) } label: {
+                Label("Add URL", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent).controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
@@ -220,6 +256,54 @@ struct ContentView: View {
         case .category(let c): return c.symbol
         case .queue: return "list.bullet"
         }
+    }
+}
+
+func statusColor(_ r: DownloadRecord) -> Color {
+    switch r.status {
+    case .downloading, .probing: return brand
+    case .queued: return .orange
+    case .paused: return .gray
+    case .finished: return r.checksumResult?.contains("not") == true ? .red : .green
+    case .failed: return .red
+    }
+}
+
+/// The system's own icon for each file type, cached by extension.
+@MainActor enum FileIcon {
+    private static var cache: [String: NSImage] = [:]
+
+    static func image(for name: String) -> NSImage {
+        let ext = (name as NSString).pathExtension.lowercased()
+        if let i = cache[ext] { return i }
+        let icon = NSWorkspace.shared.icon(for: UTType(filenameExtension: ext) ?? .data)
+        cache[ext] = icon
+        return icon
+    }
+}
+
+/// Totals along the bottom of the window.
+struct StatusBar: View {
+    @EnvironmentObject var manager: DownloadManager
+
+    var body: some View {
+        let active = manager.items.filter { $0.status.isActive }.count
+        let queued = manager.items.filter { $0.status == .queued }.count
+        let total = manager.speeds.values.reduce(0, +)
+        HStack(spacing: 14) {
+            Label("\(active) downloading", systemImage: "arrow.down.circle")
+            Label("\(queued) queued", systemImage: "clock")
+            if total > 0 { Label(speed(total), systemImage: "speedometer") }
+            Spacer()
+            if manager.settings.speedLimitKBps > 0 { Label("Limit \(manager.settings.speedLimitKBps) KB/s", systemImage: "tortoise") }
+            Text("\(manager.queues.filter(\.running).count) of \(manager.queues.count) queues running")
+        }
+        .labelStyle(.titleAndIcon)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(.bar)
     }
 }
 

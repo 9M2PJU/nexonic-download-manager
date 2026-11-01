@@ -5,12 +5,55 @@
   <Window.Resources>
     <SolidColorBrush x:Key="Accent" Color="#1F6FEB" />
     <Style x:Key="ToolButton" TargetType="Button">
-      <Setter Property="Margin" Value="2,0" />
-      <Setter Property="Padding" Value="8,4" />
-      <Setter Property="MinWidth" Value="64" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Margin" Value="1,0" />
+      <Setter Property="Padding" Value="8,5" />
+      <Setter Property="MinWidth" Value="66" />
       <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Foreground" Value="#1F2328" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bg" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#EAF1FD" /></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bg" Property="Background" Value="#D6E4FB" /></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4" /></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="DataGridColumnHeader">
+      <Setter Property="Background" Value="#F6F8FA" />
+      <Setter Property="Foreground" Value="#57606A" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="BorderBrush" Value="#E3E8EF" />
+      <Setter Property="BorderThickness" Value="0,0,1,1" />
+    </Style>
+    <Style TargetType="DataGridCell">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="DataGridCell">
+            <Border Padding="{TemplateBinding Padding}" Background="Transparent">
+              <ContentPresenter VerticalAlignment="Center" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="DataGridRow">
+      <Setter Property="Background" Value="White" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F3F7FE" /></Trigger>
+        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#DCE8FC" /><Setter Property="Foreground" Value="#1F2328" /></Trigger>
+      </Style.Triggers>
     </Style>
     <Style x:Key="Glyph" TargetType="TextBlock">
       <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
@@ -64,7 +107,20 @@
         <Button Style="{StaticResource ToolButton}" Click="OnSettings" ToolTip="Options">
           <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE713;" /><TextBlock Style="{StaticResource Caption}" Text="Options" /></StackPanel>
         </Button>
+        <Border Margin="12,6,4,6" Width="220" Height="30" CornerRadius="6" BorderBrush="#D0D7DE" BorderThickness="1" Background="White" VerticalAlignment="Center">
+          <Grid>
+            <TextBlock Text="&#xE721;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="#8B949E" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <TextBox x:Name="Search" BorderThickness="0" Background="Transparent" Margin="28,0,6,0" VerticalContentAlignment="Center" TextChanged="OnSearch" ToolTip="Search downloads (Ctrl+F)" />
+            <TextBlock x:Name="SearchHint" Text="Search downloads" Foreground="#8B949E" Margin="31,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+          </Grid>
+        </Border>
       </WrapPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Background="#F6F8FA" BorderBrush="#E3E8EF" BorderThickness="0,1,0,0" Padding="12,4">
+      <DockPanel>
+        <TextBlock x:Name="StatusRight" DockPanel.Dock="Right" Foreground="#57606A" FontSize="11" />
+        <TextBlock x:Name="StatusLeft" Foreground="#57606A" FontSize="11" />
+      </DockPanel>
     </Border>
     <Grid>
       <Grid.ColumnDefinitions>
@@ -80,8 +136,9 @@
           <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Extended" HeadersVisibility="Column"
-                  GridLinesVisibility="None" MouseDoubleClick="OnOpen" SelectionChanged="OnSelection" Background="White"
-                  BorderThickness="0" RowHeight="26" CanUserReorderColumns="True" CanUserSortColumns="True">
+                  MouseDoubleClick="OnOpen" SelectionChanged="OnSelection" Background="White"
+                  BorderThickness="0" RowHeight="30" CanUserReorderColumns="True" CanUserSortColumns="True"
+                  HorizontalGridLinesBrush="#EEF1F4" GridLinesVisibility="Horizontal">
           <DataGrid.ContextMenu>
             <ContextMenu>
               <MenuItem Header="Open" Click="OnOpen" />
@@ -99,7 +156,16 @@
             </ContextMenu>
           </DataGrid.ContextMenu>
           <DataGrid.Columns>
-            <DataGridTextColumn Header="File Name" Binding="{Binding Name}" Width="*" />
+            <DataGridTemplateColumn Header="File Name" Width="*" SortMemberPath="Name">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal">
+                    <Image Source="{Binding Icon, Mode=OneWay}" Width="16" Height="16" Margin="0,0,6,0" />
+                    <TextBlock Text="{Binding Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  </StackPanel>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
             <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="80" />
             <DataGridTemplateColumn Header="Progress" Width="120">
               <DataGridTemplateColumn.CellTemplate>
@@ -108,11 +174,26 @@
             </DataGridTemplateColumn>
             <DataGridTextColumn Header="Speed" Binding="{Binding Speed}" Width="90" />
             <DataGridTextColumn Header="Time Left" Binding="{Binding TimeLeft}" Width="80" />
-            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
+            <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="Status">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="7" Height="7" Fill="{Binding StatusBrush, Mode=OneWay}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Status, Mode=OneWay}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
             <DataGridTextColumn Header="Queue" Binding="{Binding Queue}" Width="100" />
             <DataGridTextColumn Header="Added" Binding="{Binding Added}" Width="130" />
           </DataGrid.Columns>
         </DataGrid>
+        <StackPanel x:Name="Empty" Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" MaxWidth="400">
+          <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="52" Foreground="{StaticResource Accent}" HorizontalAlignment="Center" />
+          <TextBlock x:Name="EmptyTitle" Text="No downloads here yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,6" />
+          <TextBlock Text="Click Add URL, paste a link, drop one on this window, or download from your browser with the extension." TextWrapping="Wrap" TextAlignment="Center" Foreground="#57606A" />
+          <Button Content="Add URL" Click="OnAdd" HorizontalAlignment="Center" Margin="0,14,0,0" Padding="18,6" Background="{StaticResource Accent}" Foreground="White" BorderThickness="0" Cursor="Hand" />
+        </StackPanel>
         <Border x:Name="Details" Grid.Row="1" Background="White" BorderBrush="#E3E8EF" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
           <StackPanel>
             <TextBlock x:Name="DetailName" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />

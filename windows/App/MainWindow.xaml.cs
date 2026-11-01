@@ -24,8 +24,10 @@ public partial class MainWindow : Window
         manager.Queues.CollectionChanged += (_, _) => BuildSidebar();
         InputBindings.Add(new KeyBinding(new Cmd(() => OnAdd(this, new RoutedEventArgs())), Key.N, ModifierKeys.Control));
         InputBindings.Add(new KeyBinding(new Cmd(() => OnRemove(this, new RoutedEventArgs())), Key.Delete, ModifierKeys.None));
+        InputBindings.Add(new KeyBinding(new Cmd(() => Search.Focus()), Key.F, ModifierKeys.Control));
+        UpdateStatus();
         var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        timer.Tick += (_, _) => ShowDetails();
+        timer.Tick += (_, _) => { ShowDetails(); UpdateStatus(); };
         timer.Start();
     }
 
@@ -48,7 +50,15 @@ public partial class MainWindow : Window
             Content = text.ToUpperInvariant(), IsEnabled = false, FontSize = 11, FontWeight = FontWeights.SemiBold,
             Foreground = Brushes.Gray, Margin = new Thickness(4, 8, 0, 2),
         });
-        void Entry(string text, string key) => Sidebar.Items.Add(new ListBoxItem { Content = text, Tag = key, Padding = new Thickness(14, 4, 4, 4) });
+        void Entry(string text, string key)
+        {
+            var row = new DockPanel { LastChildFill = true, MinWidth = 150 };
+            var count = new TextBlock { Text = CountFor(key), Foreground = Brushes.Gray, FontSize = 11, Margin = new Thickness(8, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(count, Dock.Right);
+            row.Children.Add(count);
+            row.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+            Sidebar.Items.Add(new ListBoxItem { Content = row, Tag = key, Padding = new Thickness(14, 5, 4, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch });
+        }
         Header("Downloads");
         Entry("All Downloads", "all");
         Entry("In Progress", "active");
@@ -64,6 +74,49 @@ public partial class MainWindow : Window
         ApplyFilter();
     }
 
+    static bool Matches(string f, DownloadRecord r) => f switch
+    {
+        "active" => r.IsActive || r.Status == DownloadStatus.Queued,
+        "unfinished" => r.Status != DownloadStatus.Finished,
+        "finished" => r.Status == DownloadStatus.Finished,
+        _ when f.StartsWith("cat:") => r.Category.ToString() == f[4..],
+        _ when f.StartsWith("queue:") => r.Queue == f[6..],
+        _ => true,
+    };
+
+    string CountFor(string key)
+    {
+        var n = manager.Rows.Count(r => Matches(key, r.Record));
+        return n > 0 ? n.ToString() : "";
+    }
+
+    void UpdateStatus()
+    {
+        var active = manager.Rows.Count(r => r.Record.IsActive);
+        var queued = manager.Rows.Count(r => r.Record.Status == DownloadStatus.Queued);
+        var speed = manager.Rows.Where(r => r.Record.IsActive).Sum(r => r.SpeedBytes);
+        StatusLeft.Text = $"{active} downloading   ·   {queued} queued" + (speed > 0 ? $"   ·   {Row.Bytes((long)speed)}/s" : "");
+        StatusRight.Text = (manager.Settings.SpeedLimitKBps > 0 ? $"Limit {manager.Settings.SpeedLimitKBps} KB/s   ·   " : "")
+                           + $"{manager.Queues.Count(q => q.Running)} of {manager.Queues.Count} queues running";
+        var view = CollectionViewSource.GetDefaultView(Grid.ItemsSource);
+        var empty = view.IsEmpty;
+        Empty.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        Grid.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        EmptyTitle.Text = Search.Text.Length > 0 ? $"Nothing matches \u201C{Search.Text}\u201D" : "No downloads here yet";
+        if (++statusTicks % 4 == 0)
+            foreach (var item in Sidebar.Items.OfType<ListBoxItem>())
+                if (item is { Tag: string key, Content: DockPanel dp } && dp.Children[0] is TextBlock c) c.Text = CountFor(key);
+    }
+
+    int statusTicks;
+
+    void OnSearch(object s, TextChangedEventArgs e)
+    {
+        SearchHint.Visibility = Search.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+        ApplyFilter();
+        UpdateStatus();
+    }
+
     string CurrentQueue => filter.StartsWith("queue:") ? filter[6..] : DownloadQueue.MainId;
 
     void OnFilter(object s, SelectionChangedEventArgs e)
@@ -76,18 +129,12 @@ public partial class MainWindow : Window
     void ApplyFilter()
     {
         var f = filter;
+        var q = Search.Text.Trim();
         CollectionViewSource.GetDefaultView(Grid.ItemsSource).Filter = o =>
         {
             var r = ((Row)o).Record;
-            return f switch
-            {
-                "active" => r.IsActive || r.Status == DownloadStatus.Queued,
-                "unfinished" => r.Status != DownloadStatus.Finished,
-                "finished" => r.Status == DownloadStatus.Finished,
-                _ when f.StartsWith("cat:") => r.Category.ToString() == f[4..],
-                _ when f.StartsWith("queue:") => r.Queue == f[6..],
-                _ => true,
-            };
+            return Matches(f, r) && (q.Length == 0 || r.FileName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                                     || r.Url.Contains(q, StringComparison.OrdinalIgnoreCase));
         };
     }
 
