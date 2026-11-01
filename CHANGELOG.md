@@ -1,3 +1,7 @@
+## 0.5.4
+
+- Releases include a plain zip of the Mac app, so the one-line Terminal installer is faster and quieter (no disk image to mount).
+
 ## 0.5.3
 
 - **Videos open the download window too:** the video button on pages, the extension popup and the right-click menu now

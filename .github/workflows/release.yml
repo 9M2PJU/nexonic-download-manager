@@ -24,6 +24,8 @@ jobs:
           V="$(cat VERSION)"
           mkdir up
           cp "build/NexonicDownloadManager-$V.dmg" up/NexonicDownloadManager-Mac.dmg
+          # Plain zip of the app for the one-line Terminal installer (no disk image to mount).
+          ditto -c -k --keepParent "build/Nexonic Download Manager.app" up/NexonicDownloadManager-Mac.zip
           cp "build/NexonicExtension-$V.zip" up/NexonicExtension-Chrome.zip
           cp "build/NexonicFirefoxAddon-$V.xpi" up/NexonicAddon-Firefox.xpi
           gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager $V" --notes-file CHANGELOG.md up/*
