@@ -317,13 +317,17 @@ final class DownloadManager: ObservableObject {
             var slots = max(1, limit) - items.filter { $0.queue == q.id && $0.status.isActive }.count
             for item in items where item.queue == q.id && item.status == .queued && slots > 0 && transfers[item.id] == nil {
                 slots -= 1
-                let t: Downloader = item.siteVideo == true
-                    ? SiteVideoTransfer(record: item, sortIntoCategories: settings.sortIntoCategoryFolders, speedLimitKBps: settings.speedLimitKBps)
-                    : item.isStream == true
-                    ? StreamTransfer(record: item, connections: settings.connections, limiter: limiter,
-                                     sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
-                    : Transfer(record: item, connections: settings.connections, limiter: limiter,
-                               sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
+                let t: Downloader
+                if item.siteVideo == true {
+                    t = SiteVideoTransfer(record: item, sortIntoCategories: settings.sortIntoCategoryFolders,
+                                          speedLimitKBps: settings.speedLimitKBps)
+                } else if item.isStream == true {
+                    t = StreamTransfer(record: item, connections: settings.connections, limiter: limiter,
+                                       sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
+                } else {
+                    t = Transfer(record: item, connections: settings.connections, limiter: limiter,
+                                 sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
+                }
                 t.onChange = { [weak self] rec in Task { @MainActor in self?.changed(rec) } }
                 transfers[item.id] = t
                 update(item.id) { $0.status = .probing }
