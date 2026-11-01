@@ -1,6 +1,10 @@
 # Layout of the Mac installer window (read by dmgbuild from scripts/build-app.sh).
 import os.path
 
+_missing = [k for k in ("app", "extension", "xpi", "icns", "background") if not defines.get(k)]
+if _missing:
+    raise SystemExit(f"dmg-settings.py: missing -D {', '.join(_missing)} (pass them from scripts/build-app.sh)")
+
 app = defines["app"]
 files = [app, defines["extension"], defines["xpi"]]
 symlinks = {"Applications": "/Applications"}
@@ -17,7 +21,10 @@ show_sidebar = False
 icon_size = 96
 
 # Terms of use shown when the disk image is opened; the user must press Agree.
-with open(defines.get("terms", "packaging/TERMS.txt"), encoding="utf-8") as f:
+_terms_path = defines.get("terms", "packaging/TERMS.txt")
+if not os.path.isfile(_terms_path):
+    raise SystemExit(f"dmg-settings.py: terms file not found: {_terms_path}")
+with open(_terms_path, encoding="utf-8") as f:
     _terms = f.read()
 license = {
     "default-language": "en_US",
