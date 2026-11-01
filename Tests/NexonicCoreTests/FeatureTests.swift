@@ -185,6 +185,7 @@ final class SiteVideoTests: XCTestCase {
                                     username: nil, password: nil, speedLimitKBps: 500)
         XCTAssertEqual(a.last, "https://youtu.be/abc")
         XCTAssertTrue(a.contains("bv*+ba/b"))
+        XCTAssertTrue(a.contains("--progress"))
         XCTAssertTrue(a.contains("quickjs:/app/qjs"))
         XCTAssertTrue(a.contains("/app"))
         XCTAssertTrue(a.contains("500K"))

@@ -59,11 +59,11 @@ public static class SiteVideo
     {
         var a = new List<string>
         {
-            "--ignore-config", "--no-playlist", "--newline", "--no-colors", "--no-mtime", "--continue",
+            "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
             "--progress-template", $"download:{ProgressTag} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s",
             "--print", $"after_move:{FileTag} %(filepath)s",
             "-P", $"home:{folder}", "-P", $"temp:{temp}",
-            "-o", "%(title).150B [%(id)s].%(ext)s",
+            "-o", "%(title).150B.%(ext)s",
             "--concurrent-fragments", "4",
             "--js-runtimes", "node",
             "--encoding", "utf-8",
@@ -201,12 +201,16 @@ public sealed class SiteVideoTransfer : IDownloader
         process.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (errors) { errors.AppendLine(e.Data); if (errors.Length > 4000) errors.Remove(0, errors.Length - 4000); } };
         process.BeginErrorReadLine();
         string? line;
+        long partBase = 0, lastDone = 0, lastTotal = 0; // parts already finished (picture, then sound)
         while ((line = process.StandardOutput.ReadLine()) != null)
         {
             if (SiteVideo.ParseProgress(line) is { } p)
             {
-                Record.StreamBytes = p.Downloaded;
-                if (p.Total is > 0) Record.Size = p.Total;
+                if (p.Downloaded < lastDone) partBase += Math.Max(lastTotal, lastDone); // the next part started
+                lastDone = p.Downloaded;
+                lastTotal = p.Total ?? lastTotal;
+                Record.StreamBytes = partBase + p.Downloaded;
+                if (lastTotal > 0) Record.Size = partBase + lastTotal;
                 Notify();
             }
             else if (SiteVideo.SavedFile(line.Trim()) is { } path) Record.SavedPath = path;

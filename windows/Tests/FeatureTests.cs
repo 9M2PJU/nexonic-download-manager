@@ -184,6 +184,7 @@ public class SiteVideoTests
         var a = SiteVideo.Arguments("https://youtu.be/abc", "/out", "/tmp/x", "/app/ffmpeg", "/app/qjs", false, null, "a=1", null, null, null, 500);
         Assert.Equal("https://youtu.be/abc", a[^1]);
         Assert.Contains("bv*+ba/b", a);
+        Assert.Contains("--progress", a);
         Assert.Contains("quickjs:/app/qjs", a);
         Assert.Contains("500K", a);
         Assert.Contains("Cookie:a=1", a);

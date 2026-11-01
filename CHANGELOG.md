@@ -1,3 +1,9 @@
+## 0.4.1
+
+- Video sites: the progress bar, speed and time left now update while a video downloads (before, it jumped from 0% to
+  done), and continue smoothly from the picture to the sound part.
+- Cleaner file names for saved videos (the page title only).
+
 ## 0.4.0
 
 - **YouTube, Instagram, Facebook, X (Twitter), TikTok, Vimeo, Reddit and 1,000+ other sites:** save videos in the best

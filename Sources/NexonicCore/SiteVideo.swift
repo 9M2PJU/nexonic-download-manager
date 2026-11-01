@@ -55,11 +55,11 @@ public enum SiteVideo {
                                  referrer: String?, cookies: String?, userAgent: String?, username: String?, password: String?,
                                  speedLimitKBps: Int) -> [String] {
         var a = [
-            "--ignore-config", "--no-playlist", "--newline", "--no-colors", "--no-mtime", "--continue",
+            "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
             "--progress-template", "download:\(progressTag) %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s",
             "--print", "after_move:\(fileTag) %(filepath)s",
             "-P", "home:\(folder)", "-P", "temp:\(temp)",
-            "-o", "%(title).150B [%(id)s].%(ext)s",
+            "-o", "%(title).150B.%(ext)s",
             "--concurrent-fragments", "4",
             "--js-runtimes", "node",
         ]
@@ -133,6 +133,9 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
     private var errors = ""
     private var buffer = ""
     private var lastNotify = Date.distantPast
+    private var partBase: Int64 = 0  // bytes of the parts already finished (picture, then sound)
+    private var lastDone: Int64 = 0
+    private var lastTotal: Int64 = 0
     private let sortIntoCategories: Bool
     private let speedLimitKBps: Int
 
@@ -236,9 +239,15 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
         lock.unlock()
         for line in lines {
             if let pr = SiteVideo.progress(line) {
+                lock.lock()
+                if pr.downloaded < lastDone { partBase += max(lastTotal, lastDone) }  // the next part started
+                lastDone = pr.downloaded
+                lastTotal = pr.total ?? lastTotal
+                let base = partBase, total = lastTotal
+                lock.unlock()
                 change {
-                    $0.streamBytes = pr.downloaded
-                    if let t = pr.total, t > 0 { $0.size = t }
+                    $0.streamBytes = base + pr.downloaded
+                    if total > 0 { $0.size = base + total }
                 }
                 notify()
             } else if let path = SiteVideo.savedFile(line.trimmingCharacters(in: .whitespacesAndNewlines)) {
