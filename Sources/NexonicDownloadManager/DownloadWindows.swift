@@ -183,8 +183,9 @@ enum ProgressWindow {
             return
         }
         guard manager.items.contains(where: { $0.id == id }) else { return }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
-                              styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 600),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.contentMinSize = NSSize(width: 520, height: 420)
         window.isReleasedWhenClosed = false
         window.title = "Download"
         let close = { [weak window] in
@@ -220,7 +221,7 @@ struct DownloadProgressView: View {
         Group {
             if let item { content(item) } else { Color.clear.onAppear(perform: close) }
         }
-        .frame(width: 560)
+        .frame(minWidth: 520, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity, alignment: .top)
         .tint(brand)
         .onReceive(manager.$speeds) { s in
             history.append(s[id] ?? 0)
@@ -319,7 +320,7 @@ struct DownloadProgressView: View {
             .font(.caption)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 120)
+        .frame(minHeight: 110, maxHeight: .infinity)
     }
 
     private func cancel(_ item: DownloadRecord) {

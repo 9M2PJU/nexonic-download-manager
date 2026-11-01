@@ -1,3 +1,7 @@
+## 0.5.2
+
+- Mac: the progress window is taller and can be resized, so more connections are visible at once.
+
 ## 0.5.1
 
 - Mac build fix for the new progress window (0.5.0 was not published).
