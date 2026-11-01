@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nexonic Download Manager: free IDM alternative for Mac and Windows</title>
+<meta name="description" content="Free, open-source download manager for Mac and Windows. Up to 32 connections per file, pause and resume, scheduler and queues, browser extension, and video downloads. No ads, no account.">
+<meta name="keywords" content="download manager, free download manager, IDM alternative, IDM for Mac, download accelerator, Mac download manager, Windows download manager, video downloader, open source">
+<link rel="canonical" href="https://shahrukhalid.github.io/nexonic-download-manager/">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#2563eb">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nexonic Download Manager">
+<meta property="og:title" content="Nexonic Download Manager: free IDM alternative for Mac and Windows">
+<meta property="og:description" content="Faster downloads with up to 32 connections, pause and resume, scheduler, browser integration and video downloads. Free and open source.">
+<meta property="og:url" content="https://shahrukhalid.github.io/nexonic-download-manager/">
+<meta property="og:image" content="https://shahrukhalid.github.io/nexonic-download-manager/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Nexonic Download Manager: free IDM alternative for Mac and Windows">
+<meta name="twitter:description" content="Up to 32 connections per file, pause and resume, scheduler, browser extension and video downloads. Free and open source.">
+<meta name="twitter:image" content="https://shahrukhalid.github.io/nexonic-download-manager/og.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Nexonic Download Manager",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "macOS 13 or later, Windows 10, Windows 11",
+  "softwareVersion": "__VERSION__",
+  "description": "Free, open-source download manager for Mac and Windows with multi-connection downloads, pause and resume, scheduler, queues, browser integration and video downloads.",
+  "url": "https://shahrukhalid.github.io/nexonic-download-manager/",
+  "downloadUrl": "https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest",
+  "license": "https://opensource.org/licenses/MIT",
+  "image": "https://shahrukhalid.github.io/nexonic-download-manager/icon.png",
+  "screenshot": "https://shahrukhalid.github.io/nexonic-download-manager/img/mac-main.png",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Shahrukh Khalid", "url": "https://www.shahrukhalid.com" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Is Nexonic Download Manager free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It is free and open source under the MIT license, with no ads, no account and no tracking."}},
+    {"@type": "Question", "name": "Is there an IDM alternative for Mac?", "acceptedAnswer": {"@type": "Answer", "text": "Nexonic Download Manager is a native Mac app (macOS 13 or later, Apple silicon and Intel) with IDM-style features: multi-connection downloads, pause and resume, a scheduler, queues and a browser extension."}},
+    {"@type": "Question", "name": "Does it work with Chrome and Firefox?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The browser extension works with Chrome, Edge, Brave, Opera and Firefox and hands downloads to the app."}},
+    {"@type": "Question", "name": "Can it download videos?", "acceptedAnswer": {"@type": "Answer", "text": "It saves videos from many sites and streamed video as one .mp4 file. Copy-protected services are not supported, and you should only download what you have the right to save."}}
+  ]
+}
+</script>
+<style>
+:root{--bg:#ffffff;--fg:#0f172a;--muted:#475569;--card:#f8fafc;--line:#e2e8f0;--brand:#2563eb;--brand2:#1d4ed8;--hero1:#0b1220;--hero2:#1e3a8a}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--fg:#e2e8f0;--muted:#94a3b8;--card:#111a2e;--line:#1f2a44}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg)}
+a{color:var(--brand)}img{max-width:100%;display:block}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0}
+nav .brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-weight:700}
+nav .brand img{width:32px;height:32px}
+nav .links a{color:#cbd5e1;text-decoration:none;margin-left:18px;font-size:15px}
+header{background:linear-gradient(160deg,var(--hero1),var(--hero2));color:#fff;padding-bottom:56px}
+.hero{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center;padding-top:40px}
+.hero h1{font-size:44px;line-height:1.15;margin:0 0 16px}
+.hero p.lead{font-size:19px;color:#cbd5e1;margin:0 0 26px}
+.btns{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 20px;border-radius:10px;font-weight:600;text-decoration:none;border:1px solid transparent}
+.btn.primary{background:var(--brand);color:#fff}.btn.primary:hover{background:var(--brand2)}
+.btn.ghost{border-color:#475569;color:#e2e8f0}.btn.ghost:hover{border-color:#94a3b8}
+.small{font-size:14px;color:#94a3b8;margin-top:14px}
+.shot{border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+section{padding:64px 0}section h2{font-size:32px;margin:0 0 10px;text-align:center}
+section p.sub{color:var(--muted);text-align:center;max-width:680px;margin:0 auto 36px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+.card h3{margin:0 0 6px;font-size:18px}.card p{margin:0;color:var(--muted);font-size:15px}
+.shots{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.shots figure{margin:0}.shots figcaption{color:var(--muted);font-size:14px;margin-top:8px;text-align:center}
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden}
+td,th{padding:14px 16px;border-bottom:1px solid var(--line);text-align:left}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+summary{font-weight:600;cursor:pointer}details p{color:var(--muted);margin:10px 0 0}
+footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-size:14px;text-align:center}
+@media (max-width:860px){.hero{grid-template-columns:1fr}.hero h1{font-size:34px}.grid{grid-template-columns:1fr 1fr}.shots{grid-template-columns:1fr}nav .links{display:none}}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="./"><img src="icon.png" alt="" width="32" height="32">Nexonic Download Manager</a>
+      <div class="links"><a href="#features">Features</a><a href="#download">Download</a><a href="#faq">FAQ</a><a href="https://github.com/Shahrukhalid/nexonic-download-manager">GitHub</a></div>
+    </nav>
+    <div class="hero">
+      <div>
+        <h1>The free download manager for Mac and Windows</h1>
+        <p class="lead">Download faster with up to 32 connections per file, pause and resume anytime, schedule downloads for the night, and save videos in the best quality. No ads, no account, no tracking.</p>
+        <div class="btns">
+          <a class="btn primary" id="main-dl" href="https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest">Download free</a>
+          <a class="btn ghost" href="https://github.com/Shahrukhalid/nexonic-download-manager">View source on GitHub</a>
+        </div>
+        <p class="small">Version __VERSION__ · macOS 13+ (Apple silicon and Intel) · Windows 10 and 11 · MIT license</p>
+      </div>
+      <img class="shot" src="img/mac-main.png" alt="Nexonic Download Manager main window on Mac showing several downloads in progress" width="1200" height="750">
+    </div>
+  </div>
+</header>
+
+<main>
+<section id="features">
+  <div class="wrap">
+    <h2>Everything you expect from a download manager</h2>
+    <p class="sub">An open-source alternative to Internet Download Manager (IDM), built natively for each system.</p>
+    <div class="grid">
+      <div class="card"><h3>Faster downloads</h3><p>Each file is split into parts that download at the same time, with up to 32 connections.</p></div>
+      <div class="card"><h3>Pause and resume</h3><p>Stop and continue later, even after a restart. Expired links can be refreshed without starting over.</p></div>
+      <div class="card"><h3>Browser integration</h3><p>Extensions for Chrome, Edge, Brave, Opera and Firefox hand downloads to the app automatically.</p></div>
+      <div class="card"><h3>Video downloads</h3><p>Save videos from many sites in the best quality, or just the sound. Streamed video is saved as one .mp4.</p></div>
+      <div class="card"><h3>Scheduler and queues</h3><p>Start downloads at night, stop in the morning, and sleep or shut down the computer when done.</p></div>
+      <div class="card"><h3>Batch and site grabber</h3><p>Download numbered series like img[001-100].jpg, or every file linked from a page.</p></div>
+      <div class="card"><h3>Speed limits and proxy</h3><p>Limit speed for all or one download, use a proxy, and download password-protected files.</p></div>
+      <div class="card"><h3>Command line</h3><p>Add downloads from scripts with the ndm command, including queues, folders and limits.</p></div>
+      <div class="card"><h3>Private by design</h3><p>No account and no tracking. Your downloads and settings stay on your computer.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--card)">
+  <div class="wrap">
+    <h2>Native on Mac and Windows</h2>
+    <p class="sub">The same features on both systems, with light and dark mode.</p>
+    <div class="shots">
+      <figure><img src="img/mac-add.png" alt="Add download window on Mac" loading="lazy"><figcaption>Add one or many links</figcaption></figure>
+      <figure><img src="img/mac-scheduler.png" alt="Scheduler window on Mac" loading="lazy"><figcaption>Scheduler and queues</figcaption></figure>
+      <figure><img src="img/windows-main.png" alt="Nexonic Download Manager on Windows" loading="lazy"><figcaption>Windows app</figcaption></figure>
+      <figure><img src="img/mac-main-dark.png" alt="Dark mode on Mac" loading="lazy"><figcaption>Dark mode</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <h2>Download</h2>
+    <p class="sub">Everything is included. Nothing else to install.</p>
+    <table>
+      <tr><th>System</th><th>File</th></tr>
+      <tr><td>Mac (macOS 13+, Apple silicon and Intel)</td><td><a href="https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicDownloadManager-Mac.dmg">NexonicDownloadManager-Mac.dmg</a></td></tr>
+      <tr><td>Windows 10 / 11</td><td><a href="https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicDownloadManager-Windows-Setup.exe">NexonicDownloadManager-Windows-Setup.exe</a></td></tr>
+      <tr><td>Windows, no install</td><td><a href="https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicDownloadManager-Windows-Portable.zip">Portable .zip</a></td></tr>
+      <tr><td>Chrome, Edge, Brave, Opera</td><td><a href="https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicExtension-Chrome.zip">Extension .zip</a></td></tr>
+      <tr><td>Firefox</td><td><a href="https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicAddon-Firefox.xpi">Add-on .xpi</a></td></tr>
+    </table>
+    <p class="sub" style="margin-top:18px">Install steps and first-launch tips are in the <a href="https://github.com/Shahrukhalid/nexonic-download-manager#install">README</a> and the <a href="https://github.com/Shahrukhalid/nexonic-download-manager/blob/main/docs/HELP.md">user guide</a>.</p>
+  </div>
+</section>
+
+<section id="faq" style="background:var(--card)">
+  <div class="wrap" style="max-width:820px">
+    <h2>FAQ</h2>
+    <p class="sub">Short answers to common questions.</p>
+    <details><summary>Is it really free?</summary><p>Yes. Nexonic Download Manager is free and open source under the MIT license, with no ads, no account and no tracking.</p></details>
+    <details><summary>Is this an IDM alternative for Mac?</summary><p>Yes. It is a native Mac app with IDM-style features: multi-connection downloads, pause and resume, a scheduler, queues and browser integration. It is not affiliated with Internet Download Manager.</p></details>
+    <details><summary>Which browsers work?</summary><p>Chrome, Edge, Brave and Opera through the extension, and Firefox through the add-on. Open the app once, then install the extension.</p></details>
+    <details><summary>macOS says it can't verify the app. What do I do?</summary><p>Open System Settings, then Privacy &amp; Security, and click Open Anyway. The app is free and not sold through Apple, so macOS asks once.</p></details>
+    <details><summary>Can it download any video?</summary><p>It saves videos from many sites and streamed video. Copy-protected services are not supported. Only download what you have the right to save, and respect each site's terms.</p></details>
+    <details><summary>How do I report a problem?</summary><p><a href="https://github.com/Shahrukhalid/nexonic-download-manager/issues/new">Open an issue on GitHub</a> with your system, the app version from About, and the link if it is public.</p></details>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Made by <a href="https://www.shahrukhalid.com">Shahrukh Khalid</a> · <a href="https://github.com/Shahrukhalid">GitHub</a> · <a href="https://github.com/Shahrukhalid/nexonic-download-manager/blob/main/TERMS.md">Terms of Use</a> · <a href="https://github.com/Shahrukhalid/nexonic-download-manager/blob/main/LICENSE">MIT License</a><br>
+    Not affiliated with Internet Download Manager or any site mentioned. If the app helps you, please <a href="https://github.com/Shahrukhalid/nexonic-download-manager">star it on GitHub</a>.
+  </div>
+</footer>
+<script>
+(function(){
+  var a=document.getElementById('main-dl'), ua=navigator.userAgent, base='https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/';
+  if(/Macintosh|Mac OS X/.test(ua)&&!/iPhone|iPad/.test(ua)){a.href=base+'NexonicDownloadManager-Mac.dmg';a.textContent='Download for Mac';}
+  else if(/Windows/.test(ua)){a.href=base+'NexonicDownloadManager-Windows-Setup.exe';a.textContent='Download for Windows';}
+})();
+</script>
+</body>
+</html>
