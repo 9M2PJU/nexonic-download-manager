@@ -16,6 +16,21 @@ jobs:
           key: ffmpeg-mac-${{ hashFiles('scripts/build-ffmpeg.sh') }}
       - name: Build (Apple silicon and Intel)
         run: bash scripts/build-app.sh
+      - name: Sign the Firefox add-on with Mozilla (when the AMO keys are set)
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        # Firefox only installs signed add-ons. "unlisted" = signed for download from GitHub, not shown in the store.
+        run: |
+          if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then
+            echo "No AMO keys: the Firefox add-on stays unsigned."; exit 0
+          fi
+          V="$(cat VERSION)"
+          npx --yes web-ext@8 sign --source-dir build/extension-firefox --channel unlisted \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" --artifacts-dir build/signed --timeout 900000
+          signed="$(ls build/signed/*.xpi | head -1)"
+          cp "$signed" "build/NexonicFirefoxAddon-$V.xpi"
+          echo "Signed: $signed"
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}

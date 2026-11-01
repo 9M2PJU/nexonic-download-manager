@@ -68,8 +68,9 @@ curl -fsSL https://shahrukhalid.github.io/nexonic-download-manager/install.sh | 
 
 - **Chrome, Edge, Brave, Opera:** unzip the extension, open the browser's extensions page, turn on **Developer mode**,
   click **Load unpacked** and pick the folder.
-- **Firefox:** drag the `.xpi` onto Firefox. Firefox only installs signed add-ons; for a quick test use
-  `about:debugging` → **Load Temporary Add-on**.
+- **Firefox:** drag the `.xpi` onto Firefox. If Firefox says the add-on "has not been verified", that release's add-on
+  isn't signed by Mozilla yet; for now open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** and
+  pick the `.xpi` (it stays until Firefox restarts).
 
 Updating? Install the new version over the old one; your downloads and settings are kept. If the Dock or Start menu
 still shows the old icon, quit the app and open it again (on Mac, restarting the computer refreshes the icon cache).
