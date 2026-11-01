@@ -30,10 +30,21 @@ Everything is included. Nothing else to install.
 
 ## Install
 
-**Mac:** open the `.dmg` and drag the app to **Applications**. The first time, macOS asks for permission:
-**System Settings → Privacy & Security → Open Anyway** (on macOS 13–14: right-click the app → **Open**).
+**Mac**
 
-**Windows:** run the Setup file. If Windows says "Windows protected your PC", click **More info → Run anyway**.
+1. Open the `.dmg`, read the Terms of Use and click **Agree**.
+2. Drag **Nexonic Download Manager** onto **Applications** (replace the old version if asked), then open it from
+   Applications.
+3. The first time, macOS may say it *could not verify* the app, because it is free and not sold through Apple.
+   Click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+   On macOS 13–14 you can instead right-click the app → **Open**.
+4. If macOS says the app *is damaged and can't be opened*, open **Terminal** and run
+   `xattr -cr "/Applications/Nexonic Download Manager.app"`, then open the app again.
+
+**Windows**
+
+1. Run the Setup file. If Windows says "Windows protected your PC", click **More info → Run anyway**.
+2. Read the Terms of Use, choose **I accept the agreement** and follow the steps.
 
 **Browser** (open the app once first):
 
@@ -42,7 +53,8 @@ Everything is included. Nothing else to install.
 - **Firefox:** drag the `.xpi` onto Firefox. Firefox only installs signed add-ons; for a quick test use
   `about:debugging` → **Load Temporary Add-on**.
 
-Need help? Read the **[user guide](docs/HELP.md)** (also built into the app: Help menu on Mac, F1 on Windows).
+Updating? Install the new version over the old one; your downloads and settings are kept. If the Dock or Start menu
+still shows the old icon, quit the app and open it again (on Mac, restarting the computer refreshes the icon cache).
 
 ## Features
 
@@ -73,11 +85,27 @@ Need help? Read the **[user guide](docs/HELP.md)** (also built into the app: Hel
 | Download at night | **Scheduler** → **New Queue** → set the time → add downloads with **Download Later** |
 | Continue an expired download | Right-click → **Refresh Link…** |
 
-Command line: `ndm <link>` (Mac: **Options → Browsers & Command Line → Install ndm Command**; Windows: added by the
+Command line: `ndm <link>` (Mac: **Settings → Browsers & Command Line → Install ndm Command**; Windows: added by the
 installer). Run `ndm help` for options.
 
 Copy-protected services (Netflix, Disney+, Prime Video, Spotify) are not supported. Only download videos you have the
 right to save.
+
+## Help and support
+
+- **User guide:** [docs/HELP.md](docs/HELP.md), also built into the app: **Help → Nexonic Download Manager Help** (⌘?)
+  on Mac, the **Help** button or **F1** on Windows.
+- **About:** the About window shows your version, links and a **Check for Updates** button.
+- **Report a problem:** [open an issue](https://github.com/Shahrukhalid/nexonic-download-manager/issues/new) with your
+  system, the app version (from About) and the link if it is public.
+- **What's new:** [CHANGELOG.md](CHANGELOG.md) and the [releases page](https://github.com/Shahrukhalid/nexonic-download-manager/releases).
+
+## Privacy and terms
+
+No account, no ads, no tracking: your downloads and settings stay on your computer. The app only connects to the
+addresses you download from, and to GitHub to keep its video engine up to date and when you check for updates.
+By installing you agree to the **[Terms of Use and License Agreement](TERMS.md)**: download only what you have the
+right to, and respect copyright and each site's terms.
 
 ## Build from source
 
@@ -89,4 +117,8 @@ pwsh windows/build.ps1                    # Windows (.NET 8 SDK, Inno Setup 6)
 
 ## License
 
-[MIT](LICENSE) © Shahrukh Khalid. Not affiliated with Internet Download Manager.
+[MIT](LICENSE) © 2026 Shahrukh Khalid. Not affiliated with Internet Download Manager or any of the sites mentioned;
+their names belong to their owners.
+
+Made by **[Shahrukh Khalid](https://www.shahrukhalid.com)** · [GitHub](https://github.com/Shahrukhalid). If this app
+saves you time, please ⭐ star the repo so others can find it.

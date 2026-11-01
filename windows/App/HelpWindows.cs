@@ -19,6 +19,7 @@ public static class HelpWindows
     public const string Releases = Project + "/releases/latest";
     public const string ReportProblem = Project + "/issues/new";
     public const string License = Project + "/blob/main/LICENSE";
+    public const string Terms = Project + "/blob/main/TERMS.md";
 
     public static string Version
     {
@@ -162,6 +163,8 @@ public static class HelpWindows
         var legal = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, Foreground = Brushes.Gray, FontSize = 11 };
         legal.Inlines.Add(new Run($"© 2026 {Author}.  "));
         legal.Inlines.Add(Link("MIT License", License));
+        legal.Inlines.Add(new Run("  ·  "));
+        legal.Inlines.Add(Link("Terms of Use", Terms));
         p.Children.Add(legal);
         var w = new Window
         {

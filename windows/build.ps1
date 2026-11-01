@@ -25,6 +25,7 @@ if (Test-Path .tools-cache\windows\yt-dlp.exe) {
 } else {
   Write-Warning "No .tools-cache\windows\yt-dlp.exe: videos from YouTube and other sites will not work in this build"
 }
+Copy-Item packaging\TERMS.txt $out
 python scripts\build-extensions.py
 if ($LASTEXITCODE -ne 0) { throw "Extension build failed" }
 Copy-Item build\extension-chrome "$out\Extension" -Recurse

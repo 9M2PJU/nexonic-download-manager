@@ -70,6 +70,10 @@ The same guide is built into the app: **Help → Nexonic Download Manager Help**
 
 **macOS won't open the app.** Open System Settings, then Privacy & Security, and click Open Anyway. On macOS 13 and 14 you can also right-click the app and choose Open.
 
+**macOS says the app is damaged.** Open Terminal and run: xattr -cr "/Applications/Nexonic Download Manager.app" Then open the app again. This happens because the app is free and not sold through Apple.
+
+**The old icon still shows.** Install the new version over the old one in Applications, quit the app and open it again. Restarting the Mac refreshes the icon cache.
+
 **The browser doesn't hand over downloads.** Open the app once so it can register itself with your browsers, then restart the browser.
 
 **A video site stopped working.** The video engine updates itself every day. Try again later, and if it still fails, report the problem with the page link.
@@ -86,5 +90,6 @@ The same guide is built into the app: **Help → Nexonic Download Manager Help**
 
 - [Report a problem](https://github.com/Shahrukhalid/nexonic-download-manager/issues/new) (include your system, the app version from About, and the link if it is public).
 - [Latest version and release notes](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest)
+- [Terms of Use and License Agreement](../TERMS.md)
 
 Made by [Shahrukh Khalid](https://www.shahrukhalid.com) · [GitHub](https://github.com/Shahrukhalid) · MIT License

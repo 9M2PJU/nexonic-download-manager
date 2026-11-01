@@ -1,3 +1,11 @@
+## 0.4.4
+
+- **Terms of Use and License Agreement:** shown when you open the Mac disk image (Agree / Disagree) and in the Windows
+  installer (I accept the agreement); included with the app as TERMS.txt and linked from About and the Help menu.
+- Windows installer lists the publisher, support and update links.
+- Clearer first-launch steps for macOS ("could not verify" and "damaged" messages) and for updating, in the README
+  and the built-in Help.
+
 ## 0.4.3
 
 - **Help:** a built-in Help window on Mac (Help menu, ⌘?) and Windows (Help button, F1) with topics for getting started,
