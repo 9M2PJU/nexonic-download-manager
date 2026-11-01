@@ -2,6 +2,13 @@ import AppKit
 import Combine
 import NexonicCore
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// The system icon for a file name.
+@MainActor func fileIcon(_ name: String) -> NSImage {
+    let ext = (name as NSString).pathExtension
+    return NSWorkspace.shared.icon(for: UTType(filenameExtension: ext) ?? .data)
+}
 
 // MARK: Download window (shown when a link is clicked in the browser)
 
@@ -58,7 +65,7 @@ struct DownloadInfoView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
-                Image(nsImage: NSWorkspace.shared.icon(forFileType: (name as NSString).pathExtension.isEmpty ? "public.data" : (name as NSString).pathExtension))
+                Image(nsImage: fileIcon(name))
                     .resizable().frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("File name", text: $name).textFieldStyle(.roundedBorder).font(.headline)
@@ -184,7 +191,7 @@ enum ProgressWindow {
             window?.close()
             windows[id] = nil
         }
-        let setTitle = { [weak window] (t: String) in window?.title = t }
+        let setTitle: (String) -> Void = { [weak window] t in window?.title = t }
         window.contentView = NSHostingView(rootView: DownloadProgressView(id: id, close: close, setTitle: setTitle)
             .environmentObject(manager))
         window.center()
@@ -229,8 +236,7 @@ struct DownloadProgressView: View {
         let bps = manager.speeds[id] ?? 0
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Image(nsImage: NSWorkspace.shared.icon(forFileType: (item.fileName as NSString).pathExtension.isEmpty
-                    ? "public.data" : (item.fileName as NSString).pathExtension))
+                Image(nsImage: fileIcon(item.fileName))
                     .resizable().frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.fileName).font(.headline).lineLimit(1).truncationMode(.middle)

@@ -1,3 +1,7 @@
+## 0.5.1
+
+- Mac build fix for the new progress window (0.5.0 was not published).
+
 ## 0.5.0
 
 - **Download window:** clicking a download link in Chrome, Edge, Brave, Opera or Firefox opens a compact window with the
