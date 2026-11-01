@@ -2,7 +2,7 @@ import AppKit
 import NexonicCore
 import SwiftUI
 
-func chooseFolder(_ start: URL) -> URL? {
+@MainActor func chooseFolder(_ start: URL) -> URL? {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
     panel.canChooseFiles = false

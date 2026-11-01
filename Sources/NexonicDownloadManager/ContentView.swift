@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 enum SidebarFilter: Hashable {
     case all, active, unfinished, finished, category(FileCategory), queue(String)
 
-    func title(_ m: DownloadManager) -> String {
+    @MainActor func title(_ m: DownloadManager) -> String {
         switch self {
         case .all: return "All Downloads"
         case .active: return "In Progress"
@@ -223,7 +223,7 @@ struct ContentView: View {
     }
 }
 
-func clipboardLink() -> String {
+@MainActor func clipboardLink() -> String {
     guard let s = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
           DownloadJob(url: s).validURL != nil else { return "" }
     return s
