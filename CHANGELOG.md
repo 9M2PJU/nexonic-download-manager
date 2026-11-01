@@ -1,3 +1,11 @@
+## 0.5.3
+
+- **Videos open the download window too:** the video button on pages, the extension popup and the right-click menu now
+  show the same download window as file links (name, size or best quality, folder, sound only), instead of starting
+  straight away.
+- **"Preparing video…" status:** video sites need a few seconds to find the best quality before the first byte arrives;
+  the list and the progress window now say so instead of sitting at 0%.
+
 ## 0.5.2
 
 - Mac: the progress window is taller and can be resized, so more connections are visible at once.

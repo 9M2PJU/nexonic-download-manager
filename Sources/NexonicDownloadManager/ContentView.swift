@@ -338,7 +338,13 @@ struct StatusBar: View {
 func bytes(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .file) }
 func speed(_ bps: Double) -> String { bps > 0 ? "\(bytes(Int64(bps)))/s" : "" }
 
+/// Video sites and streams take a few seconds to look up the best quality before the first byte arrives.
+func isPreparingVideo(_ r: DownloadRecord) -> Bool {
+    r.status.isActive && (r.siteVideo == true || r.isStream == true) && r.received == 0
+}
+
 func statusText(_ r: DownloadRecord) -> String {
+    if isPreparingVideo(r) { return "Preparing video…" }
     switch r.status {
     case .queued: return "Queued"
     case .probing: return "Connecting…"

@@ -283,7 +283,7 @@ public static class DownloadWindows
             var pct = r.Progress * 100;
             w.Title = $"{(int)pct}% {r.FileName}";
             fileName.Text = r.FileName;
-            values[0].Text = r.Status switch
+            values[0].Text = row.PreparingVideo ? "Preparing video… (finding the best quality)" : r.Status switch
             {
                 DownloadStatus.Queued => "Waiting in queue",
                 DownloadStatus.Probing => "Connecting…",

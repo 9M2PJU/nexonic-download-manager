@@ -79,7 +79,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     return;
   }
   if (info.menuItemId === "nexonic-page-video") {
-    send(info.pageUrl || (tab && tab.url), { site: true });
+    send(info.pageUrl || (tab && tab.url), { site: true, browser: true });
     return;
   }
   const url = info.linkUrl || info.srcUrl;
@@ -192,7 +192,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   const run = async () => {
     switch (msg && msg.type) {
       case "send-link": {
-        const extra = { referrer, later: !!msg.later };
+        // One link the user picked (video button, popup, page menu): the app shows its download window.
+        const extra = { referrer, later: !!msg.later, browser: true };
         if (msg.stream) Object.assign(extra, { stream: true, fileName: msg.fileName });
         else if (msg.site) Object.assign(extra, { site: true, audioOnly: !!msg.audioOnly });
         else if (msg.fileName) extra.fileName = msg.fileName;

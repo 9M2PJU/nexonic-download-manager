@@ -289,6 +289,7 @@ struct DownloadProgressView: View {
     }
 
     private func statusText(_ item: DownloadRecord) -> String {
+        if isPreparingVideo(item) { return "Preparing video… (finding the best quality)" }
         switch item.status {
         case .queued: return "Waiting in queue"
         case .probing: return "Connecting…"
