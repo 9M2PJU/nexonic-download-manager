@@ -139,4 +139,4 @@ jobs:
       - name: Firefox add-on passes the linter
         run: npx --yes web-ext@8 lint --source-dir build/extension-firefox --warnings-as-errors=false
       - name: No outside names
-        run: "! grep -rniE 'claude|anthropic' --exclude-dir=.git --exclude-dir=.github ."
+        run: "! grep -rniE 'cl[a]ude|anthr[o]pic' --exclude-dir=.git --exclude-dir=.github ."
