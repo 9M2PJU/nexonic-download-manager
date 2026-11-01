@@ -6,6 +6,19 @@ public enum DownloadStatus: String, Codable, Sendable {
     public var isActive: Bool { self == .probing || self == .downloading }
 }
 
+/// One piece of a video from a video site (the picture or the sound), shown in the progress window.
+public struct VideoPart: Codable, Equatable, Sendable {
+    public var name: String
+    public var done: Int64
+    public var total: Int64?
+
+    public init(name: String, done: Int64, total: Int64?) {
+        self.name = name
+        self.done = done
+        self.total = total
+    }
+}
+
 /// One byte range of a download. `end` is inclusive; -1 means "until the server stops" (size unknown).
 public struct Segment: Codable, Equatable, Sendable {
     public var id: Int
@@ -59,6 +72,9 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
     public var audioOnly: Bool?
     // Added in 0.5.5: video details looked up while the download window was open (path of a yt-dlp info file)
     public var infoJSON: String?
+    // Added in 0.6.0: the picture and sound pieces of a video, and the step after downloading (joining them)
+    public var videoParts: [VideoPart]?
+    public var videoStep: String?
 
     public init(url: URL, folder: URL, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil,
                 userAgent: String? = nil) {
@@ -206,13 +222,16 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showDownloadDialog: Bool = true
     public var showProgressWindow: Bool = true
     public var bringToFrontOnBrowserDownload: Bool = false
+    // Added in 0.6.0: in-app updates
+    public var checkForUpdates: Bool = true
+    public var skippedVersion: String = ""
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case connections, maxActive, speedLimitKBps, folder, sortIntoCategoryFolders, notifications, monitorClipboard,
              clipboardTypes, proxy, showCompleteDialog, playSound, markDownloads, scanEnabled, scanCommand,
-             showDownloadDialog, showProgressWindow, bringToFrontOnBrowserDownload
+             showDownloadDialog, showProgressWindow, bringToFrontOnBrowserDownload, checkForUpdates, skippedVersion
     }
 
     /// Missing keys keep their defaults, so settings from older versions still load.
@@ -237,6 +256,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showProgressWindow = try c.decodeIfPresent(Bool.self, forKey: .showProgressWindow) ?? d.showProgressWindow
         bringToFrontOnBrowserDownload = try c.decodeIfPresent(Bool.self, forKey: .bringToFrontOnBrowserDownload)
             ?? d.bringToFrontOnBrowserDownload
+        checkForUpdates = try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? d.checkForUpdates
+        skippedVersion = try c.decodeIfPresent(String.self, forKey: .skippedVersion) ?? d.skippedVersion
     }
 }
 

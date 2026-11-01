@@ -220,4 +220,33 @@ public class SiteVideoTests
         Assert.Equal(1200, r.Total);
         Assert.Equal("137", SiteVideo.ParseProgress("NDMP 10 20 NA 1.5 137")?.Part);
     }
+
+    [Fact]
+    public void VideoPiecesStepsAndName()
+    {
+        var parts = new SiteVideo.PartProgress();
+        parts.Add(SiteVideo.ParseProgress("NDMP 300 1000 NA 5.0 137 1080 avc1.640028")!);
+        parts.Add(SiteVideo.ParseProgress("NDMP 20 40 NA 5.0 140 NA none")!);
+        Assert.Equal(new[] { "Picture 1080p", "Sound" }, parts.Pieces.Select(p => p.Name).ToArray());
+        Assert.Equal(300, parts.Pieces[0].Done);
+        Assert.Equal("Joining picture and sound…", SiteVideo.Step("[Merger] Merging formats into \"x.mp4\""));
+        Assert.Null(SiteVideo.Step("[download] 50%"));
+        Assert.Equal("My Song.mp4", SiteVideo.DestinationName("[download] Destination: /t/My Song.f137.mp4"));
+    }
+
+    [Fact]
+    public void UpdateVersionsAndNotes()
+    {
+        Assert.True(Updates.IsNewer("0.6.0", "0.5.9"));
+        Assert.True(Updates.IsNewer("0.10.0", "0.9.1"));
+        Assert.False(Updates.IsNewer("0.5.9", "0.5.9"));
+        Assert.False(Updates.IsNewer("0.5.8", "0.5.9"));
+        var notes = Updates.Notes("## 0.6.0\n\n- **New:** updates\n\n## 0.5.9\n\n- old", "0.5.9");
+        Assert.Contains("Version 0.6.0", notes);
+        Assert.Contains("New: updates", notes);
+        Assert.DoesNotContain("old", notes);
+        var r = Updates.Parse("{\"tag_name\":\"v0.6.0\",\"html_url\":\"https://x/r\",\"body\":\"b\",\"assets\":[{\"name\":\"a.exe\",\"browser_download_url\":\"https://x/a.exe\"}]}");
+        Assert.Equal("0.6.0", r!.Version);
+        Assert.Equal("https://x/a.exe", r.Assets["a.exe"]);
+    }
 }

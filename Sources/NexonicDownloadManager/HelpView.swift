@@ -77,6 +77,7 @@ enum HelpContent {
             HelpSection(heading: "The old icon still shows", text: "Install the new version over the old one in Applications, quit the app and open it again. Restarting the Mac refreshes the icon cache."),
             HelpSection(heading: "The browser doesn't hand over downloads", text: "Open the app once so it can register itself with your browsers, then restart the browser."),
             HelpSection(heading: "A video site stopped working", text: "The video engine updates itself every day. Try again later, and if it still fails, report the problem with the page link."),
+            HelpSection(heading: "Updating the app", text: "When a new version is released, the app tells you when it opens, with what's new. Choose Update Now to install it (the app closes, updates and opens again), Remind Me Later, or Skip This Version. You can also use Check for Updates in the menu, or turn the check off in Settings."),
         ]),
         HelpTopic(id: "keys", title: "Keyboard Shortcuts", symbol: "keyboard", sections: [
             HelpSection(heading: "Downloads", text: "⌘N  Add URL\n⇧⌘P  Stop all\n⇧⌘R  Resume all\n⌘,  Settings\n⌘?  Help"),
@@ -110,7 +111,7 @@ struct HelpView: View {
                         HStack(spacing: 16) {
                             Button("Online Help") { AppLinks.open(AppLinks.onlineHelp) }
                             Button("Report a Problem") { AppLinks.open(AppLinks.reportProblem) }
-                            Button("Check for Updates") { AppLinks.open(AppLinks.releases) }
+                            Button("Check for Updates") { Updater.check(manual: true) }
                         }
                         .buttonStyle(.link)
                     }
@@ -152,7 +153,7 @@ struct AboutView: View {
                 Link("Terms of Use", destination: AppLinks.terms)
             }
             .font(.caption).foregroundStyle(.secondary)
-            Button("Check for Updates") { AppLinks.open(AppLinks.releases) }.padding(.top, 4)
+            Button("Check for Updates") { Updater.check(manual: true) }.padding(.top, 4)
         }
         .padding(28)
         .frame(width: 420)

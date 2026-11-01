@@ -82,6 +82,7 @@ public static class HelpWindows
             ("\"Windows protected your PC\"", "Click More info, then Run anyway. This appears because the installer is not signed with a paid certificate."),
             ("The browser doesn't hand over downloads", "Open the app once so it can register itself with your browsers, then restart the browser."),
             ("A video site stopped working", "The video engine updates itself every day. Try again later, and if it still fails, report the problem with the page link."),
+            ("Updating the app", "When a new version is released, the app tells you when it opens, with what's new. Choose Update Now to install it (the app closes, updates and opens again), Remind Me Later, or Skip This Version. You can also use Check for Updates in the menu, or turn the check off in Options. The portable copy opens the download page instead."),
         }),
         ("Keyboard Shortcuts", new[]
         {
@@ -174,7 +175,7 @@ public static class HelpWindows
         };
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
         var update = new Button { Content = "Check for Updates", Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(4, 0, 4, 0) };
-        update.Click += (_, _) => Open(Releases);
+        update.Click += (_, _) => _ = Updater.Check(true);
         var close = new Button { Content = "Close", MinWidth = 80, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(4, 0, 4, 0), IsDefault = true, IsCancel = true };
         close.Click += (_, _) => w.Close();
         buttons.Children.Add(update);

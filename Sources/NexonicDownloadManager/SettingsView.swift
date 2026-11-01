@@ -19,6 +19,11 @@ struct SettingsView: View {
                 }
                 Toggle("Sort into category folders (Video, Music, Documents…)", isOn: $manager.settings.sortIntoCategoryFolders)
                 Toggle("Notifications", isOn: $manager.settings.notifications)
+                HStack {
+                    Toggle("Check for updates when the app opens", isOn: $manager.settings.checkForUpdates)
+                    Spacer()
+                    Button("Check Now") { Updater.check(manual: true) }
+                }
                 Section("Browser downloads") {
                     Toggle("Show the download window when a link is clicked in the browser", isOn: $manager.settings.showDownloadDialog)
                     Toggle("Show a progress window for each download I start", isOn: $manager.settings.showProgressWindow)

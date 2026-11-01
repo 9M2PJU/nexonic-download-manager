@@ -52,6 +52,8 @@ end;
 
 [Run]
 Filename: "{app}\NexonicDownloadManager.exe"; Description: "Start Nexonic Download Manager"; Flags: nowait postinstall skipifsilent
+; In-app updates run the setup quietly: open the new version again afterwards.
+Filename: "{app}\NexonicDownloadManager.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [Messages]
 FinishedLabel=Thank you for installing Nexonic Download Manager!%n%nMore tools and updates:%ngithub.com/Shahrukhalid%nwww.shahrukhalid.com

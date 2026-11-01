@@ -20,6 +20,7 @@ public enum SiteVideo {
         public var total: Int64?
         public var speed: Double?
         public var part: String? = nil  // format of the piece being downloaded (picture or sound)
+        public var label: String? = nil  // "Picture 1080p" or "Sound"
     }
 
     /// Adds up the progress of the pieces of one video (picture and sound are downloaded one after the other).
@@ -28,12 +29,21 @@ public enum SiteVideo {
         private var done: [String: Int64] = [:]
         private var totals: [String: Int64] = [:]
         private var order: [String] = []
+        private var labels: [String: String] = [:]
 
         public init() {}
+
+        /// Each piece in the order it started, for the progress window.
+        public var pieces: [VideoPart] {
+            order.enumerated().map { i, k in
+                VideoPart(name: labels[k] ?? (order.count > 1 ? "Part \(i + 1)" : "Video"), done: done[k] ?? 0, total: totals[k])
+            }
+        }
 
         public mutating func add(_ p: Progress) -> (done: Int64, total: Int64?) {
             let key = p.part ?? ""
             if done[key] == nil { order.append(key) }
+            if let l = p.label { labels[key] = l }
             done[key] = max(done[key] ?? 0, p.downloaded)
             if let t = p.total, t > 0 { totals[key] = t }
             let sum = order.reduce(Int64(0)) { $0 + (done[$1] ?? 0) }
@@ -51,7 +61,29 @@ public enum SiteVideo {
         guard p.count >= 5, p[0] == progressTag, let done = Double(p[1]) else { return nil }
         let total = Double(p[2]) ?? Double(p[3])
         let part = p.count >= 6 && p[5] != "NA" ? p[5] : nil
-        return Progress(downloaded: Int64(done), total: total.map { Int64($0) }, speed: Double(p[4]), part: part)
+        var label: String?
+        if p.count >= 8 {
+            let height = Int(p[6]).map { " \($0)p" } ?? ""
+            label = p[7] == "none" ? "Sound" : "Picture" + height
+        }
+        return Progress(downloaded: Int64(done), total: total.map { Int64($0) }, speed: Double(p[4]), part: part, label: label)
+    }
+
+    /// What yt-dlp is doing after the pieces are downloaded ("[Merger] Merging formats into …").
+    public static func step(_ line: String) -> String? {
+        if line.hasPrefix("[Merger]") { return "Joining picture and sound…" }
+        if line.hasPrefix("[ExtractAudio]") { return "Converting the sound…" }
+        if line.hasPrefix("[Fixup") || line.hasPrefix("[VideoConvertor]") || line.hasPrefix("[VideoRemuxer]") { return "Finishing the file…" }
+        return nil
+    }
+
+    /// The video's real name from "[download] Destination: …/Title.f137.mp4" (the piece number is dropped).
+    public static func destinationName(_ line: String) -> String? {
+        let tag = "[download] Destination: "
+        guard line.hasPrefix(tag) else { return nil }
+        let name = (String(line.dropFirst(tag.count)) as NSString).lastPathComponent
+        let clean = name.replacingOccurrences(of: #"\.f[0-9A-Za-z_-]+(\.[^.]+)$"#, with: "$1", options: .regularExpression)
+        return clean.isEmpty ? nil : clean
     }
 
     /// The saved file's path, from the line printed after the final move.
@@ -117,7 +149,7 @@ public enum SiteVideo {
                                  speedLimitKBps: Int, infoJSON: String? = nil) -> [String] {
         var a = [
             "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
-            "--progress-template", "download:\(progressTag) %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s %(info.format_id)s",
+            "--progress-template", "download:\(progressTag) %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s %(info.format_id)s %(info.height)s %(info.vcodec)s",
             "--print", "after_move:\(fileTag) %(filepath)s",
             "-P", "home:\(folder)", "-P", "temp:\(temp)",
             "-o", "%(title).150B.%(ext)s",
@@ -243,7 +275,7 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
 
     private func run() {
         SiteVideoTools.prepare()
-        change { $0.status = .probing; $0.error = nil; $0.siteVideo = true }
+        change { $0.status = .probing; $0.error = nil; $0.siteVideo = true; $0.videoStep = nil }
         notify(force: true)
         let r = rec
         guard FileManager.default.isExecutableFile(atPath: SiteVideoTools.ytdlp.path) else {
@@ -289,6 +321,7 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
             $0.size = size
             $0.streamBytes = size
             $0.status = .finished
+            $0.videoStep = nil
             $0.finished = Date()
         }
         notify(force: true)
@@ -305,12 +338,20 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
             if let pr = SiteVideo.progress(line) {
                 lock.lock()
                 let sum = parts.add(pr)
+                let pieces = parts.pieces
                 lock.unlock()
                 change {
                     $0.streamBytes = sum.done
                     if let t = sum.total { $0.size = t }
+                    $0.videoParts = pieces
                 }
                 notify()
+            } else if let s = SiteVideo.step(line) {
+                change { $0.videoStep = s }
+                notify(force: true)
+            } else if let name = SiteVideo.destinationName(line.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                change { $0.fileName = name }
+                notify(force: true)
             } else if let path = SiteVideo.savedFile(line.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 change { $0.savedPath = path }
             }

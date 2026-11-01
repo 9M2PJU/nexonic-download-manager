@@ -222,10 +222,10 @@ enum ProgressWindow {
             return
         }
         guard let rec = manager.items.first(where: { $0.id == id }) else { return }
-        let compact = rec.siteVideo == true || rec.isStream == true  // no per-connection list to show
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: compact ? 400 : 600),
+        let compact = rec.siteVideo == true || rec.isStream == true  // a short list of pieces instead of connections
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: compact ? 470 : 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.contentMinSize = NSSize(width: 520, height: compact ? 360 : 420)
+        window.contentMinSize = NSSize(width: 520, height: 250)
         window.isReleasedWhenClosed = false
         window.title = "Download"
         let close = { [weak window] in
@@ -233,7 +233,21 @@ enum ProgressWindow {
             windows[id] = nil
         }
         let setTitle: (String) -> Void = { [weak window] t in window?.title = t }
-        window.contentView = NSHostingView(rootView: DownloadProgressView(id: id, close: close, setTitle: setTitle)
+        // Hide Details shrinks the window to the summary; Show Details brings back the height it had.
+        var tallHeight: CGFloat?
+        let fit: (Bool) -> Void = { [weak window] showDetails in
+            DispatchQueue.main.async {
+                guard let window, let view = window.contentView else { return }
+                var frame = window.frame
+                if !showDetails { tallHeight = frame.height }
+                let fitting = window.frameRect(forContentRect: NSRect(origin: .zero, size: view.fittingSize)).height
+                let height = showDetails ? max(tallHeight ?? fitting, fitting) : fitting
+                frame.origin.y += frame.height - height
+                frame.size.height = height
+                window.setFrame(frame, display: true, animate: true)
+            }
+        }
+        window.contentView = NSHostingView(rootView: DownloadProgressView(id: id, close: close, setTitle: setTitle, fit: fit)
             .environmentObject(manager))
         window.center()
         if let last = windows.values.first(where: \.isVisible) {
@@ -252,6 +266,7 @@ struct DownloadProgressView: View {
     let id: UUID
     let close: () -> Void
     let setTitle: (String) -> Void
+    let fit: (Bool) -> Void
     @State private var history: [Double] = []
     @State private var details = true
 
@@ -261,7 +276,7 @@ struct DownloadProgressView: View {
         Group {
             if let item { content(item) } else { Color.clear.onAppear(perform: close) }
         }
-        .frame(minWidth: 520, maxWidth: .infinity, minHeight: 360, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .tint(brand)
         .onReceive(manager.$speeds) { s in
             history.append(s[id] ?? 0)
@@ -311,11 +326,15 @@ struct DownloadProgressView: View {
                         if let path = item.savedPath { Text("Saved as: \((path as NSString).lastPathComponent)").lineLimit(1) }
                     }
                     .font(.caption).foregroundStyle(.secondary)
+                    videoParts(item)
                 }
             }
             if let e = item.error { Text(e).font(.caption).foregroundStyle(.red).lineLimit(2) }
             HStack {
-                Button(details ? "Hide Details" : "Show Details") { details.toggle() }
+                Button(details ? "Hide Details" : "Show Details") {
+                    details.toggle()
+                    fit(details)
+                }
                 Spacer()
                 if item.status.isActive || item.status == .queued {
                     Button("Pause") { manager.pause(id) }
@@ -338,6 +357,7 @@ struct DownloadProgressView: View {
 
     private func statusText(_ item: DownloadRecord) -> String {
         if isPreparingVideo(item) { return "Preparing video… (finding the best quality)" }
+        if item.status.isActive, let step = item.videoStep { return step }
         switch item.status {
         case .queued: return "Waiting in queue"
         case .probing: return "Connecting…"
@@ -346,6 +366,40 @@ struct DownloadProgressView: View {
         case .finished: return "Complete"
         case .failed: return "Failed"
         }
+    }
+
+    /// The picture and sound pieces of a video, like the connection list of a normal download.
+    private func videoParts(_ item: DownloadRecord) -> some View {
+        let parts = item.videoParts ?? []
+        return Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 3) {
+            GridRow {
+                Text("N.").bold()
+                Text("Piece").bold()
+                Text("Downloaded").bold()
+                Text("Info").bold()
+            }
+            if parts.isEmpty {
+                GridRow {
+                    Text("1")
+                    Text("Video")
+                    Text(bytes(item.received)).monospacedDigit()
+                    Text(item.status.isActive ? "Connecting…" : "Waiting").foregroundStyle(.secondary)
+                }
+            }
+            ForEach(Array(parts.enumerated()), id: \.offset) { i, p in
+                let complete = p.total.map { p.done >= $0 } ?? false
+                GridRow {
+                    Text("\(i + 1)")
+                    Text(p.name)
+                    Text(bytes(p.done) + (p.total.map { " of " + bytes($0) } ?? "")).monospacedDigit()
+                    Text(complete ? "Complete" : item.status == .downloading ? (item.videoStep ?? "Receiving data…")
+                         : item.status == .probing ? "Connecting…" : "Waiting")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .font(.caption)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func connections(_ item: DownloadRecord) -> some View {

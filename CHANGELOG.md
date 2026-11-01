@@ -1,3 +1,19 @@
+## 0.6.0
+
+- **In-app updates:** when a new version is released, the app tells you when it opens (and once a day while it runs),
+  with what's new and three choices: Update Now, Remind Me Later or Skip This Version. Update Now downloads the new
+  version, closes the app, installs it and opens it again (Mac: the app in Applications; Windows: the installed app,
+  the portable copy opens the download page). Turn it off or check by hand in Settings (Options on Windows) and from
+  Check for Updates in the app and Help menus.
+- **Video progress window shows real activity:** Show Details lists the picture and sound pieces with how much of each
+  is downloaded, like the connection list of a normal download, and the window shrinks when details are hidden and
+  grows back when shown.
+- **Transfer rate and time left for videos:** the speed is averaged over the last few seconds, so videos (which arrive
+  in bursts) show a steady transfer rate, a time left and a smooth graph instead of empty values and spikes.
+- **Clear last step:** at the end of a video the status says "Joining picture and sound…" instead of staying on 99%.
+- **Real video name from the start:** the list and the progress window show the video's title (with a video icon)
+  as soon as the download begins.
+
 ## 0.5.9
 
 - **Firefox add-on signed by Mozilla:** the `.xpi` in each release now installs in regular Firefox by dragging it onto

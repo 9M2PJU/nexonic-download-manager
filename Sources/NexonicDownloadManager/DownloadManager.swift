@@ -32,7 +32,7 @@ final class DownloadManager: ObservableObject {
     }
 
     private var transfers: [UUID: Downloader] = [:]
-    private var lastReceived: [UUID: Int64] = [:]
+    private var recent: [UUID: [Int64]] = [:]  // received bytes at each of the last ticks
     private var requeue: Set<UUID> = []
     private var pendingRefresh: [UUID: String?] = [:]
     private var queuesWithWork: Set<String> = []
@@ -469,11 +469,18 @@ final class DownloadManager: ObservableObject {
     private func tick() {
         ticks += 1
         var s: [UUID: Double] = [:]
+        // Averaged over the last 6 seconds: video sites deliver in bursts, so a single tick is often 0.
         for item in items where item.status.isActive {
-            let r = item.received
-            s[item.id] = max(0, Double(r - (lastReceived[item.id] ?? r)) * 2)
-            lastReceived[item.id] = r
+            var h = recent[item.id] ?? []
+            h.append(item.received)
+            if h.count > 13 { h.removeFirst(h.count - 13) }
+            recent[item.id] = h
+            if let first = h.first, let last = h.last, h.count > 1 {
+                s[item.id] = max(0, Double(last - first) / (Double(h.count - 1) * 0.5))
+            }
         }
+        let activeIDs = Set(items.filter { $0.status.isActive }.map(\.id))
+        recent = recent.filter { activeIDs.contains($0.key) }
         speeds = s
         let active = items.filter { $0.status.isActive }.count
         NSApp.dockTile.badgeLabel = active > 0 ? "\(active)" : nil

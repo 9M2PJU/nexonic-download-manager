@@ -31,6 +31,7 @@ public sealed class DownloadManager
     public event Action<string, string>? Notify;
     public event Action<string>? ClipboardLink;
     public event Action? QuitRequested;
+    public void RequestQuit() => QuitRequested?.Invoke();
     /// <summary>A link clicked in the browser that should open the download window.</summary>
     public event Action<DownloadJob>? DownloadDialogRequested;
     public event Action<Row>? ProgressRequested;
@@ -496,14 +497,13 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
     public DownloadRecord Record { get; }
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     readonly Func<string, string> queueName;
-    long lastReceived;
+    readonly Queue<long> recent = new();   // received bytes at each of the last ticks
     public double SpeedBytes { get; private set; }
 
     public Row(DownloadRecord r, Func<string, string> queueName)
     {
         Record = r;
         this.queueName = queueName;
-        lastReceived = r.Received;
     }
 
     public string Name => Record.FileName;
@@ -538,9 +538,10 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
 
     public void Tick()
     {
-        var r = Record.Received;
-        SpeedBytes = Math.Max(0, (r - lastReceived) * 2);
-        lastReceived = r;
+        // Averaged over the last 6 seconds: video sites deliver in bursts, so a single tick is often 0.
+        recent.Enqueue(Record.Received);
+        while (recent.Count > 13) recent.Dequeue();
+        SpeedBytes = recent.Count > 1 ? Math.Max(0, (recent.Last() - recent.Peek()) / ((recent.Count - 1) * 0.5)) : 0;
         Refresh();
     }
 

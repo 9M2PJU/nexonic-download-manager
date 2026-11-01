@@ -91,6 +91,8 @@ still shows the old icon, quit the app and open it again (on Mac, restarting the
 - **Scheduler and queues:** start at night, stop in the morning, sleep or shut down when done.
 - **Batch downloads** (`img[001-100].jpg`), a **site grabber**, and **clipboard** detection.
 - **Speed limits**, proxy, password-protected downloads and checksum checks.
+- **Updates inside the app:** a new version shows up when you open the app, with what's new and Update Now, Remind
+  Me Later or Skip This Version.
 - **Same app on Mac and Windows**, light and dark mode, no account, no tracking.
 
 <p align="center">

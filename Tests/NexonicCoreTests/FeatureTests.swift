@@ -223,4 +223,30 @@ final class SiteVideoTests: XCTestCase {
         XCTAssertEqual(r.total, 1200)
         XCTAssertEqual(SiteVideo.progress("NDMP 10 20 NA 1.5 137")?.part, "137")
     }
+
+    func testVideoPiecesStepsAndName() {
+        var parts = SiteVideo.PartProgress()
+        _ = parts.add(SiteVideo.progress("NDMP 300 1000 NA 5.0 137 1080 avc1.640028")!)
+        _ = parts.add(SiteVideo.progress("NDMP 20 40 NA 5.0 140 NA none")!)
+        XCTAssertEqual(parts.pieces.map(\.name), ["Picture 1080p", "Sound"])
+        XCTAssertEqual(parts.pieces.first?.done, 300)
+        XCTAssertEqual(SiteVideo.step("[Merger] Merging formats into \"x.mp4\""), "Joining picture and sound…")
+        XCTAssertNil(SiteVideo.step("[download] 50%"))
+        XCTAssertEqual(SiteVideo.destinationName("[download] Destination: /t/My Song.f137.mp4"), "My Song.mp4")
+    }
+
+    func testUpdateVersionsAndNotes() {
+        XCTAssertTrue(Updates.isNewer("0.6.0", than: "0.5.9"))
+        XCTAssertTrue(Updates.isNewer("0.10.0", than: "0.9.1"))
+        XCTAssertFalse(Updates.isNewer("0.5.9", than: "0.5.9"))
+        XCTAssertFalse(Updates.isNewer("0.5.8", than: "0.5.9"))
+        let notes = Updates.notes("## 0.6.0\n\n- **New:** updates\n\n## 0.5.9\n\n- old", after: "0.5.9")
+        XCTAssertTrue(notes.contains("Version 0.6.0"))
+        XCTAssertTrue(notes.contains("New: updates"))
+        XCTAssertFalse(notes.contains("old"))
+        let json = #"{"tag_name":"v0.6.0","html_url":"https://x/r","body":"b","assets":[{"name":"a.zip","browser_download_url":"https://x/a.zip"}]}"#
+        let r = Updates.parse(Data(json.utf8))
+        XCTAssertEqual(r?.version, "0.6.0")
+        XCTAssertEqual(r?.assets["a.zip"], URL(string: "https://x/a.zip"))
+    }
 }

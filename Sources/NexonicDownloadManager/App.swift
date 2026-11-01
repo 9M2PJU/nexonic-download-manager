@@ -43,6 +43,10 @@ struct NexonicDownloadManagerApp: App {
 /// browser is added to the running app without opening or fronting a window unless the user wants that.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Updater.start()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             if url.host == "show" {
@@ -61,7 +65,7 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Nexonic Download Manager") { show("about") }
-            Button("Check for Updates…") { AppLinks.open(AppLinks.releases) }
+            Button("Check for Updates…") { Updater.check(manual: true) }
         }
         CommandGroup(replacing: .help) {
             Button("Nexonic Download Manager Help") { show("help") }.keyboardShortcut("?", modifiers: .command)

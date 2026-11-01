@@ -330,7 +330,8 @@ public static class DownloadWindows
             var pct = r.Progress * 100;
             w.Title = $"{(int)pct}% {r.FileName}";
             fileName.Text = r.FileName;
-            values[0].Text = row.PreparingVideo ? "Preparing video… (finding the best quality)" : r.Status switch
+            values[0].Text = row.PreparingVideo ? "Preparing video… (finding the best quality)"
+                : r.IsActive && r.VideoStep is { } step ? step : r.Status switch
             {
                 DownloadStatus.Queued => "Waiting in queue",
                 DownloadStatus.Probing => "Connecting…",
@@ -367,7 +368,26 @@ public static class DownloadWindows
             area.Points = poly;
 
             var plain = r.IsStream != true && r.SiteVideo != true && r.Segments.Count > 0;
-            segments.Visibility = conns.Visibility = plain ? Visibility.Visible : Visibility.Collapsed;
+            segments.Visibility = plain ? Visibility.Visible : Visibility.Collapsed;
+            conns.Visibility = plain || r.SiteVideo == true ? Visibility.Visible : Visibility.Collapsed;
+            if (r.SiteVideo == true)
+            {
+                // The picture and sound pieces, like the connection list of a normal download.
+                var pieces = r.VideoParts?.ToList() ?? new List<VideoPart> { new() { Name = "Video", Done = r.Received } };
+                var videoKey = string.Join(",", pieces.Select(x => x.Done)) + r.Status + r.VideoStep;
+                if (videoKey != lastSegments)
+                {
+                    lastSegments = videoKey;
+                    conns.ItemsSource = pieces.Select((pc, i) => new
+                    {
+                        N = i + 1,
+                        Downloaded = Nexonic.App.Row.Bytes(pc.Done) + (pc.Total is long t ? " of " + Nexonic.App.Row.Bytes(t) : ""),
+                        Info = pc.Name + " · " + (pc.Total is long tt && pc.Done >= tt ? "Complete"
+                            : r.Status == DownloadStatus.Downloading ? r.VideoStep ?? "Receiving data…"
+                            : r.Status == DownloadStatus.Probing ? "Connecting…" : "Waiting"),
+                    }).ToList();
+                }
+            }
             if (!plain)
             {
                 segCaption.Text = r.SiteVideo == true

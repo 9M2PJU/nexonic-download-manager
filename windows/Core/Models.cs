@@ -15,6 +15,14 @@ public sealed class Segment
     public bool IsComplete => End >= 0 && Written >= End - Start + 1;
 }
 
+/// <summary>One piece of a video from a video site (the picture or the sound), shown in the progress window.</summary>
+public sealed class VideoPart
+{
+    public string Name { get; set; } = "";
+    public long Done { get; set; }
+    public long? Total { get; set; }
+}
+
 public sealed class DownloadRecord
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -50,6 +58,9 @@ public sealed class DownloadRecord
     public bool? AudioOnly { get; set; }
     // Added in 0.5.5: video details looked up while the download window was open (path of a yt-dlp info file)
     public string? InfoJson { get; set; }
+    // Added in 0.6.0: the picture and sound pieces of a video, and the step after downloading (joining them)
+    public List<VideoPart>? VideoParts { get; set; }
+    public string? VideoStep { get; set; }
 
     public long Received { get { if (IsStream == true || SiteVideo == true) return StreamBytes ?? 0; lock (Segments) return Segments.Sum(s => s.Written); } }
     public double Progress => IsStream == true
@@ -162,6 +173,9 @@ public sealed class AppSettings
     public bool ShowDownloadDialog { get; set; } = true;
     public bool ShowProgressWindow { get; set; } = true;
     public bool BringToFrontOnBrowserDownload { get; set; }
+    // Added in 0.6.0: in-app updates
+    public bool CheckForUpdates { get; set; } = true;
+    public string SkippedVersion { get; set; } = "";
     public string ScanCommand { get; set; } = "\"%ProgramFiles%\\Windows Defender\\MpCmdRun.exe\" -Scan -ScanType 3 -DisableRemediation -File";
 }
 

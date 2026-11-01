@@ -1,0 +1,155 @@
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using Nexonic.Core;
+
+namespace Nexonic.App;
+
+/// <summary>Tells the user when a new version is published and installs it (Update Now, Remind Me Later, Skip This Version).</summary>
+public static class Updater
+{
+    static DownloadManager? manager;
+    static DispatcherTimer? daily;
+    static bool busy;
+
+    /// <summary>Checks a few seconds after the app opens, then once a day while it keeps running.</summary>
+    public static void Start(DownloadManager m)
+    {
+        manager = m;
+        if (Environment.GetEnvironmentVariable("NDM_DEMO") == "1") return;   // not while taking screenshots
+        var first = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        first.Tick += (_, _) => { first.Stop(); _ = Check(false); };
+        first.Start();
+        daily = new DispatcherTimer { Interval = TimeSpan.FromHours(24) };
+        daily.Tick += (_, _) => _ = Check(false);
+        daily.Start();
+    }
+
+    static HttpClient Client()
+    {
+        var c = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("NexonicDownloadManager/" + HelpWindows.Version);
+        c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        return c;
+    }
+
+    public static async Task Check(bool manual)
+    {
+        if (manager is null || busy || (!manual && !manager.Settings.CheckForUpdates)) return;
+        busy = true;
+        Updates.Release? release = null;
+        try
+        {
+            using var c = Client();
+            c.Timeout = TimeSpan.FromSeconds(20);
+            release = Updates.Parse(await c.GetStringAsync(Updates.LatestUrl));
+        }
+        catch { }
+        finally { busy = false; }
+
+        var current = HelpWindows.Version;
+        if (release is null)
+        {
+            if (manual) MessageBox.Show("Check your internet connection and try again.", "Couldn't check for updates");
+            return;
+        }
+        if (!Updates.IsNewer(release.Version, current))
+        {
+            if (manual) MessageBox.Show($"Nexonic Download Manager {current} is the newest version.", "You're up to date");
+            return;
+        }
+        if (!manual && manager.Settings.SkippedVersion == release.Version) return;
+
+        switch (Ask(release, current))
+        {
+            case "update": await Install(release); break;
+            case "skip":
+                manager.Settings.SkippedVersion = release.Version;
+                manager.ApplySettings(manager.Settings);
+                break;
+        }
+    }
+
+    static string Ask(Updates.Release r, string current)
+    {
+        var result = "later";
+        var w = new Window
+        {
+            Title = "Update available", Width = 500, SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen, Topmost = true,
+        };
+        var root = new StackPanel { Margin = new Thickness(18) };
+        root.Children.Add(new TextBlock { Text = "A new version of Nexonic Download Manager is available", FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        root.Children.Add(new TextBlock { Text = $"Version {r.Version} is ready to install. You have {current}.", Margin = new Thickness(0, 6, 0, 10) });
+        root.Children.Add(new TextBlock { Text = "What's new:", FontWeight = FontWeights.SemiBold });
+        var notes = Updates.Notes(r.Notes, current);
+        root.Children.Add(new TextBox
+        {
+            Text = notes.Length > 0 ? notes : "Improvements and fixes.", IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Height = 190, Margin = new Thickness(0, 4, 0, 0), Padding = new Thickness(6),
+        });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+        void Add(string text, string value, bool isDefault = false, bool isCancel = false)
+        {
+            var b = new Button { Content = text, Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(6, 0, 0, 0), IsDefault = isDefault, IsCancel = isCancel };
+            b.Click += (_, _) => { result = value; w.Close(); };
+            buttons.Children.Add(b);
+        }
+        Add("Skip This Version", "skip");
+        Add("Remind Me Later", "later", isCancel: true);
+        Add("Update Now", "update", isDefault: true);
+        root.Children.Add(buttons);
+        w.Content = root;
+        w.ShowDialog();
+        return result;
+    }
+
+    /// <summary>
+    /// Installed copies download the new setup and run it quietly (it closes this copy, updates and opens the new one).
+    /// The portable copy opens the release page instead.
+    /// </summary>
+    static async Task Install(Updates.Release r)
+    {
+        var installed = File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
+        if (!installed || !r.Assets.TryGetValue("NexonicDownloadManager-Windows-Setup.exe", out var url))
+        {
+            HelpWindows.Open(r.Page);
+            return;
+        }
+        var progress = new Window
+        {
+            Title = "Updating Nexonic Download Manager", Width = 360, SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen, Topmost = true,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(18),
+                Children =
+                {
+                    new TextBlock { Text = $"Downloading version {r.Version}…" },
+                    new ProgressBar { IsIndeterminate = true, Height = 14, Margin = new Thickness(0, 10, 0, 0) },
+                },
+            },
+        };
+        progress.Show();
+        var file = Path.Combine(Path.GetTempPath(), $"NexonicDownloadManager-{r.Version}-Setup.exe");
+        try
+        {
+            using var c = Client();
+            await using (var src = await c.GetStreamAsync(url))
+            await using (var dst = File.Create(file))
+                await src.CopyToAsync(dst);
+            progress.Close();
+            Process.Start(new ProcessStartInfo(file, "/SILENT /SP- /NOCANCEL /CLOSEAPPLICATIONS /NORESTART") { UseShellExecute = true });
+        }
+        catch (Exception e)
+        {
+            progress.Close();
+            MessageBox.Show("The update could not be downloaded: " + e.Message + "\nTry again later, or download it from the release page.", "Update");
+            return;
+        }
+        manager?.RequestQuit();
+    }
+}

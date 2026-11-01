@@ -80,6 +80,8 @@ The same guide is built into the app: **Help → Nexonic Download Manager Help**
 
 **A video site stopped working.** The video engine updates itself every day. Try again later, and if it still fails, report the problem with the page link.
 
+**Updating the app.** When a new version is released, the app tells you when it opens, with what's new. Choose Update Now to install it (the app closes, updates and opens again), Remind Me Later, or Skip This Version. You can also use Check for Updates in the menu, or turn the check off in Settings.
+
 ## Keyboard Shortcuts
 
 **Downloads.** ⌘N  Add URL  

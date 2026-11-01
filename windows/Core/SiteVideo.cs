@@ -24,7 +24,7 @@ public static class SiteVideo
         return Hosts.Any(h => host == h || host.EndsWith("." + h));
     }
 
-    public sealed record Progress(long Downloaded, long? Total, double? Speed, string? Part = null);
+    public sealed record Progress(long Downloaded, long? Total, double? Speed, string? Part = null, string? Label = null);
 
     /// <summary>
     /// Adds up the progress of the pieces of one video (picture and sound are downloaded one after the other).
@@ -34,10 +34,22 @@ public static class SiteVideo
     {
         readonly Dictionary<string, long> done = new();
         readonly Dictionary<string, long> totals = new();
+        readonly Dictionary<string, string> labels = new();
+        readonly List<string> order = new();
+
+        /// <summary>Each piece in the order it started, for the progress window.</summary>
+        public List<VideoPart> Pieces => order.Select((k, i) => new VideoPart
+        {
+            Name = labels.GetValueOrDefault(k) ?? (order.Count > 1 ? $"Part {i + 1}" : "Video"),
+            Done = done.GetValueOrDefault(k),
+            Total = totals.TryGetValue(k, out var t) ? t : null,
+        }).ToList();
 
         public (long Done, long? Total) Add(Progress p)
         {
             var key = p.Part ?? "";
+            if (!done.ContainsKey(key)) order.Add(key);
+            if (p.Label != null) labels[key] = p.Label;
             done[key] = Math.Max(done.GetValueOrDefault(key), p.Downloaded);
             if (p.Total is > 0) totals[key] = p.Total.Value;
             var sum = done.Values.Sum();
@@ -56,7 +68,28 @@ public static class SiteVideo
         var p = line.Split(' ');
         if (p.Length < 5 || p[0] != ProgressTag || Num(p[1]) is not { } done) return null;
         var total = Num(p[2]) ?? Num(p[3]);
-        return new Progress((long)done, total is { } t ? (long)t : null, Num(p[4]), p.Length >= 6 && p[5] != "NA" ? p[5] : null);
+        string? label = null;
+        if (p.Length >= 8) label = p[7] == "none" ? "Sound" : "Picture" + (int.TryParse(p[6], out var h) ? $" {h}p" : "");
+        return new Progress((long)done, total is { } t ? (long)t : null, Num(p[4]), p.Length >= 6 && p[5] != "NA" ? p[5] : null, label);
+    }
+
+    /// <summary>What yt-dlp is doing after the pieces are downloaded ("[Merger] Merging formats into …").</summary>
+    public static string? Step(string line)
+    {
+        if (line.StartsWith("[Merger]")) return "Joining picture and sound…";
+        if (line.StartsWith("[ExtractAudio]")) return "Converting the sound…";
+        if (line.StartsWith("[Fixup") || line.StartsWith("[VideoConvertor]") || line.StartsWith("[VideoRemuxer]")) return "Finishing the file…";
+        return null;
+    }
+
+    /// <summary>The video's real name from "[download] Destination: …\Title.f137.mp4" (the piece number is dropped).</summary>
+    public static string? DestinationName(string line)
+    {
+        const string tag = "[download] Destination: ";
+        if (!line.StartsWith(tag)) return null;
+        var name = Path.GetFileName(line[tag.Length..]);
+        name = Regex.Replace(name, @"\.f[0-9A-Za-z_-]+(\.[^.]+)$", "$1");
+        return name.Length > 0 ? name : null;
     }
 
     public static string? SavedFile(string line) => line.StartsWith(FileTag + " ") ? line[(FileTag.Length + 1)..] : null;
@@ -131,7 +164,7 @@ public static class SiteVideo
         var a = new List<string>
         {
             "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
-            "--progress-template", $"download:{ProgressTag} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s %(info.format_id)s",
+            "--progress-template", $"download:{ProgressTag} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s %(info.format_id)s %(info.height)s %(info.vcodec)s",
             "--print", $"after_move:{FileTag} %(filepath)s",
             "-P", $"home:{folder}", "-P", $"temp:{temp}",
             "-o", "%(title).150B.%(ext)s",
@@ -254,6 +287,7 @@ public sealed class SiteVideoTransfer : IDownloader
         Record.Status = DownloadStatus.Probing;
         Record.Error = null;
         Record.SiteVideo = true;
+        Record.VideoStep = null;
         Notify(true);
         if (!File.Exists(SiteVideoTools.YtDlp)) { Fail("The video engine is missing. Reinstall the app"); return; }
         var folder = Record.Folder;
@@ -288,8 +322,11 @@ public sealed class SiteVideoTransfer : IDownloader
                 var sum = parts.Add(p);
                 Record.StreamBytes = sum.Done;
                 if (sum.Total is long t) Record.Size = t;
+                Record.VideoParts = parts.Pieces;
                 Notify();
             }
+            else if (SiteVideo.Step(line) is { } step) { Record.VideoStep = step; Notify(true); }
+            else if (SiteVideo.DestinationName(line.Trim()) is { } name) { Record.FileName = name; Notify(true); }
             else if (SiteVideo.SavedFile(line.Trim()) is { } path) Record.SavedPath = path;
         }
         process.WaitForExit();
@@ -306,6 +343,7 @@ public sealed class SiteVideoTransfer : IDownloader
         Record.Size = new FileInfo(saved).Length;
         Record.StreamBytes = Record.Size;
         Record.Status = DownloadStatus.Finished;
+        Record.VideoStep = null;
         Record.Finished = DateTime.Now;
         Notify(true);
     }
