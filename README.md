@@ -29,6 +29,16 @@ Download faster, pause and resume anytime, and save videos from YouTube, Instagr
 
 Everything is included. Nothing else to install.
 
+> **Mac users:** the easiest way is one command in Terminal. It installs or updates the app and opens it without the
+> "Apple could not verify" message:
+>
+> ```bash
+> curl -fsSL https://shahrukhalid.github.io/nexonic-download-manager/install.sh | bash
+> ```
+>
+> Prefer the `.dmg`? That works too: macOS asks once (System Settings → Privacy & Security → **Open Anyway**), and
+> never again for that version.
+
 ## Install
 
 **Mac, quickest:** paste this into Terminal. It installs (or updates) the app in Applications and opens it, with no
