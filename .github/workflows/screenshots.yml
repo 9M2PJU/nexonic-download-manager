@@ -26,7 +26,7 @@ jobs:
           python3 scripts/demo-server.py 8099 &
           sleep 1
           APP="build/Nexonic Download Manager.app/Contents/MacOS/NexonicDownloadManager"
-          for shot in "main::light" "add:add:light" "scheduler:scheduler:light" "batch:batch:light" "main-dark::dark"; do
+          for shot in "main::light" "add:add:light" "scheduler:scheduler:light" "batch:batch:light" "info:info:light" "progress:progress:light" "main-dark::dark"; do
             IFS=: read -r name sheet look <<< "$shot"
             rm -rf "$HOME/Library/Application Support/Nexonic Download Manager"
             NDM_DEMO=1 NDM_SNAPSHOT="$PWD/shots" NDM_NAME="mac-$name" NDM_SHEET="$sheet" NDM_APPEARANCE="$look" \
@@ -55,7 +55,7 @@ jobs:
           $server = Start-Process python -ArgumentList "scripts/demo-server.py", "8099" -PassThru -WindowStyle Hidden
           Start-Sleep 1
           New-Item -ItemType Directory shots | Out-Null
-          foreach ($shot in @("main:", "add:add", "scheduler:scheduler", "batch:batch")) {
+          foreach ($shot in @("main:", "add:add", "scheduler:scheduler", "batch:batch", "info:info", "progress:progress")) {
             $name, $sheet = $shot.Split(":")
             Remove-Item "$env:LOCALAPPDATA\Nexonic Download Manager" -Recurse -Force -ErrorAction SilentlyContinue
             $env:NDM_DEMO = "1"; $env:NDM_SNAPSHOT = "$PWD\shots"; $env:NDM_NAME = "windows-$name"; $env:NDM_SHEET = $sheet

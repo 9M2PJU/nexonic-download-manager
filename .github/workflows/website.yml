@@ -29,8 +29,8 @@ jobs:
           sed -i "s/__VERSION__/$V/g" site/index.html
           mkdir -p site/img
           git fetch --depth 1 origin screenshots
-          for f in mac-main.png mac-main-dark.png mac-add.png mac-scheduler.png windows-main.png; do
-            git show "origin/screenshots:$f" > "site/img/$f"
+          for f in mac-main.png mac-main-dark.png mac-add.png mac-scheduler.png mac-info.png mac-progress.png windows-main.png; do
+            git show "origin/screenshots:$f" > "site/img/$f" 2>/dev/null || rm -f "site/img/$f"
           done
           printf 'User-agent: *\nAllow: /\nSitemap: https://shahrukhalid.github.io/nexonic-download-manager/sitemap.xml\n' > site/robots.txt
           printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://shahrukhalid.github.io/nexonic-download-manager/</loc><lastmod>%s</lastmod></url></urlset>\n' "$(date -u +%F)" > site/sitemap.xml

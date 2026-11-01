@@ -120,6 +120,9 @@ struct ContentView: View {
                 case "add": sheet = .add(AddRequest(links: "https://example.com/files/course-lecture-09-1080p.mp4"))
                 case "scheduler": sheet = .scheduler(Demo.nightQueueID)
                 case "batch": sheet = .batch
+                case "info": DownloadInfoWindow.show(Demo.infoJob, manager: manager)
+                case "progress":
+                    if let r = manager.items.first(where: { $0.fileName == Demo.liveName }) { ProgressWindow.show(r.id, manager: manager) }
                 default: break
                 }
             }

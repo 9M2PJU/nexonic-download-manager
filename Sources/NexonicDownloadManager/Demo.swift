@@ -3,10 +3,18 @@ import NexonicCore
 
 /// Fills the app with a sample list and saves pictures of its windows, for the README screenshots.
 /// Only active when started with NDM_DEMO=1; NDM_SNAPSHOT=<folder> saves the pictures and quits,
-/// NDM_SHEET=add|scheduler|batch opens that window first, NDM_LIVE=<link> adds one real running download.
+/// NDM_SHEET=add|scheduler|batch|info|progress opens that window first, NDM_LIVE=<link> adds one real running download.
 @MainActor
 enum Demo {
     static let nightQueueID = "demo-night"
+    static let liveName = "conference-keynote-1080p.mp4"
+    /// What the browser hands over in the download-window picture.
+    static var infoJob: DownloadJob {
+        var j = DownloadJob(url: "https://example.com/releases/studio-suite-2026-installer.dmg")
+        j.size = 1_840_000_000
+        j.fromBrowser = true
+        return j
+    }
     private static var started = false
     private static var env: [String: String] { ProcessInfo.processInfo.environment }
 
@@ -70,7 +78,7 @@ enum Demo {
         records[0].checksum = "sha256:demo"
         records[0].checksumResult = "SHA-256 matches"
         if let live = env["NDM_LIVE"], let url = URL(string: live) {
-            var r = DownloadRecord(url: url, folder: folder.appendingPathComponent("NDM Demo"), fileName: "conference-keynote-1080p.mp4")
+            var r = DownloadRecord(url: url, folder: folder.appendingPathComponent("NDM Demo"), fileName: liveName)
             r.added = Date()
             records.append(r)
             var s = m.settings
@@ -104,6 +112,15 @@ enum Demo {
         let out = NSImage(size: size)
         out.lockFocus()
         base.draw(in: NSRect(origin: .zero, size: size))
+        // A separate window (download or progress window) is drawn centred over the main window.
+        if main.attachedSheet == nil,
+           let panel = NSApp.windows.first(where: { $0 !== main && $0.isVisible && (400...720).contains($0.frame.width) }),
+           let p = image(of: panel) {
+            NSColor.black.withAlphaComponent(0.18).setFill()
+            NSRect(origin: .zero, size: size).fill(using: .sourceAtop)
+            let w = CGFloat(p.pixelsWide), h = CGFloat(p.pixelsHigh)
+            p.draw(in: NSRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h))
+        }
         if let sheet = main.attachedSheet, let s = image(of: sheet) {
             NSColor.black.withAlphaComponent(0.12).setFill()
             NSRect(origin: .zero, size: size).fill(using: .sourceAtop)
