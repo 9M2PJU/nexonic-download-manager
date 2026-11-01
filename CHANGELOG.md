@@ -1,3 +1,9 @@
+## 0.5.6
+
+- **Fix: wrong video size and progress.** Videos downloaded in many small pieces could show a size and amount far too
+  large (for example 1.5 GB for a 73 MB video) and jumpy speeds. Picture and sound are now counted separately and each
+  only ever grows, so size, progress, speed and time left are accurate.
+
 ## 0.5.5
 
 - **Videos start right away:** the download window now looks the video up while it is open, like IDM checks a file

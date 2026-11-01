@@ -212,4 +212,15 @@ final class SiteVideoTests: XCTestCase {
                                     speedLimitKBps: 0, infoJSON: file.path)
         XCTAssertEqual(Array(a.suffix(2)), ["--load-info-json", file.path])
     }
+
+    func testVideoPiecesAddUpWithoutInflating() {
+        var parts = SiteVideo.PartProgress()
+        _ = parts.add(.init(downloaded: 100, total: 1000, speed: nil, part: "137"))
+        _ = parts.add(.init(downloaded: 80, total: 1000, speed: nil, part: "137"))   // fragments report out of order
+        _ = parts.add(.init(downloaded: 1000, total: 1000, speed: nil, part: "137"))
+        let r = parts.add(.init(downloaded: 50, total: 200, speed: nil, part: "140"))
+        XCTAssertEqual(r.done, 1050)
+        XCTAssertEqual(r.total, 1200)
+        XCTAssertEqual(SiteVideo.progress("NDMP 10 20 NA 1.5 137")?.part, "137")
+    }
 }

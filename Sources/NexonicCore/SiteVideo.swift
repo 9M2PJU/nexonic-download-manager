@@ -19,6 +19,27 @@ public enum SiteVideo {
         public var downloaded: Int64
         public var total: Int64?
         public var speed: Double?
+        public var part: String? = nil  // format of the piece being downloaded (picture or sound)
+    }
+
+    /// Adds up the progress of the pieces of one video (picture and sound are downloaded one after the other).
+    /// Each piece only ever grows, so the jumps of fragmented downloads can't inflate the total.
+    public struct PartProgress {
+        private var done: [String: Int64] = [:]
+        private var totals: [String: Int64] = [:]
+        private var order: [String] = []
+
+        public init() {}
+
+        public mutating func add(_ p: Progress) -> (done: Int64, total: Int64?) {
+            let key = p.part ?? ""
+            if done[key] == nil { order.append(key) }
+            done[key] = max(done[key] ?? 0, p.downloaded)
+            if let t = p.total, t > 0 { totals[key] = t }
+            let sum = order.reduce(Int64(0)) { $0 + (done[$1] ?? 0) }
+            let known = order.reduce(Int64(0)) { $0 + max(totals[$1] ?? 0, done[$1] ?? 0) }
+            return (sum, totals.isEmpty ? nil : max(known, sum))
+        }
     }
 
     static let progressTag = "NDMP"
@@ -29,7 +50,8 @@ public enum SiteVideo {
         let p = line.split(separator: " ").map(String.init)
         guard p.count >= 5, p[0] == progressTag, let done = Double(p[1]) else { return nil }
         let total = Double(p[2]) ?? Double(p[3])
-        return Progress(downloaded: Int64(done), total: total.map { Int64($0) }, speed: Double(p[4]))
+        let part = p.count >= 6 && p[5] != "NA" ? p[5] : nil
+        return Progress(downloaded: Int64(done), total: total.map { Int64($0) }, speed: Double(p[4]), part: part)
     }
 
     /// The saved file's path, from the line printed after the final move.
@@ -95,7 +117,7 @@ public enum SiteVideo {
                                  speedLimitKBps: Int, infoJSON: String? = nil) -> [String] {
         var a = [
             "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
-            "--progress-template", "download:\(progressTag) %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s",
+            "--progress-template", "download:\(progressTag) %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s %(info.format_id)s",
             "--print", "after_move:\(fileTag) %(filepath)s",
             "-P", "home:\(folder)", "-P", "temp:\(temp)",
             "-o", "%(title).150B.%(ext)s",
@@ -177,9 +199,7 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
     private var errors = ""
     private var buffer = ""
     private var lastNotify = Date.distantPast
-    private var partBase: Int64 = 0  // bytes of the parts already finished (picture, then sound)
-    private var lastDone: Int64 = 0
-    private var lastTotal: Int64 = 0
+    private var parts = SiteVideo.PartProgress()  // picture and sound pieces added up
     private let sortIntoCategories: Bool
     private let speedLimitKBps: Int
 
@@ -284,14 +304,11 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
         for line in lines {
             if let pr = SiteVideo.progress(line) {
                 lock.lock()
-                if pr.downloaded < lastDone { partBase += max(lastTotal, lastDone) }  // the next part started
-                lastDone = pr.downloaded
-                lastTotal = pr.total ?? lastTotal
-                let base = partBase, total = lastTotal
+                let sum = parts.add(pr)
                 lock.unlock()
                 change {
-                    $0.streamBytes = base + pr.downloaded
-                    if total > 0 { $0.size = base + total }
+                    $0.streamBytes = sum.done
+                    if let t = sum.total { $0.size = t }
                 }
                 notify()
             } else if let path = SiteVideo.savedFile(line.trimmingCharacters(in: .whitespacesAndNewlines)) {

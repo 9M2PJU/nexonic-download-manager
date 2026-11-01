@@ -24,7 +24,27 @@ public static class SiteVideo
         return Hosts.Any(h => host == h || host.EndsWith("." + h));
     }
 
-    public sealed record Progress(long Downloaded, long? Total, double? Speed);
+    public sealed record Progress(long Downloaded, long? Total, double? Speed, string? Part = null);
+
+    /// <summary>
+    /// Adds up the progress of the pieces of one video (picture and sound are downloaded one after the other).
+    /// Each piece only ever grows, so the jumps of fragmented downloads can't inflate the total.
+    /// </summary>
+    public sealed class PartProgress
+    {
+        readonly Dictionary<string, long> done = new();
+        readonly Dictionary<string, long> totals = new();
+
+        public (long Done, long? Total) Add(Progress p)
+        {
+            var key = p.Part ?? "";
+            done[key] = Math.Max(done.GetValueOrDefault(key), p.Downloaded);
+            if (p.Total is > 0) totals[key] = p.Total.Value;
+            var sum = done.Values.Sum();
+            var known = done.Keys.Sum(k => Math.Max(totals.GetValueOrDefault(k), done[k]));
+            return (sum, totals.Count == 0 ? null : Math.Max(known, sum));
+        }
+    }
 
     const string ProgressTag = "NDMP";
     const string FileTag = "NDMF";
@@ -36,7 +56,7 @@ public static class SiteVideo
         var p = line.Split(' ');
         if (p.Length < 5 || p[0] != ProgressTag || Num(p[1]) is not { } done) return null;
         var total = Num(p[2]) ?? Num(p[3]);
-        return new Progress((long)done, total is { } t ? (long)t : null, Num(p[4]));
+        return new Progress((long)done, total is { } t ? (long)t : null, Num(p[4]), p.Length >= 6 && p[5] != "NA" ? p[5] : null);
     }
 
     public static string? SavedFile(string line) => line.StartsWith(FileTag + " ") ? line[(FileTag.Length + 1)..] : null;
@@ -111,7 +131,7 @@ public static class SiteVideo
         var a = new List<string>
         {
             "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
-            "--progress-template", $"download:{ProgressTag} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s",
+            "--progress-template", $"download:{ProgressTag} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s %(info.format_id)s",
             "--print", $"after_move:{FileTag} %(filepath)s",
             "-P", $"home:{folder}", "-P", $"temp:{temp}",
             "-o", "%(title).150B.%(ext)s",
@@ -260,16 +280,14 @@ public sealed class SiteVideoTransfer : IDownloader
         process.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (errors) { errors.AppendLine(e.Data); if (errors.Length > 4000) errors.Remove(0, errors.Length - 4000); } };
         process.BeginErrorReadLine();
         string? line;
-        long partBase = 0, lastDone = 0, lastTotal = 0; // parts already finished (picture, then sound)
+        var parts = new SiteVideo.PartProgress(); // picture and sound pieces added up
         while ((line = process.StandardOutput.ReadLine()) != null)
         {
             if (SiteVideo.ParseProgress(line) is { } p)
             {
-                if (p.Downloaded < lastDone) partBase += Math.Max(lastTotal, lastDone); // the next part started
-                lastDone = p.Downloaded;
-                lastTotal = p.Total ?? lastTotal;
-                Record.StreamBytes = partBase + p.Downloaded;
-                if (lastTotal > 0) Record.Size = partBase + lastTotal;
+                var sum = parts.Add(p);
+                Record.StreamBytes = sum.Done;
+                if (sum.Total is long t) Record.Size = t;
                 Notify();
             }
             else if (SiteVideo.SavedFile(line.Trim()) is { } path) Record.SavedPath = path;

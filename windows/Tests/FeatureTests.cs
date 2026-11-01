@@ -207,4 +207,17 @@ public class SiteVideoTests
         }
         finally { File.Delete(file); }
     }
+
+    [Fact]
+    public void VideoPiecesAddUpWithoutInflating()
+    {
+        var parts = new SiteVideo.PartProgress();
+        parts.Add(new SiteVideo.Progress(100, 1000, null, "137"));
+        parts.Add(new SiteVideo.Progress(80, 1000, null, "137"));   // fragments report out of order
+        parts.Add(new SiteVideo.Progress(1000, 1000, null, "137"));
+        var r = parts.Add(new SiteVideo.Progress(50, 200, null, "140"));
+        Assert.Equal(1050, r.Done);
+        Assert.Equal(1200, r.Total);
+        Assert.Equal("137", SiteVideo.ParseProgress("NDMP 10 20 NA 1.5 137")?.Part);
+    }
 }
