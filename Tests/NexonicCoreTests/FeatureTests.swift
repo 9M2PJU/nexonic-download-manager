@@ -195,4 +195,21 @@ final class SiteVideoTests: XCTestCase {
                                         speedLimitKBps: 0)
         XCTAssertTrue(audio.contains("ba[ext=m4a]/ba/b"))
     }
+
+    func testVideoInfoAndReuse() throws {
+        let json = #"{"title":"Koi Song","ext":"mp4","requested_formats":[{"filesize":1000},{"filesize_approx":234}]}"#
+        let info = try XCTUnwrap(SiteVideo.info(Data(json.utf8)))
+        XCTAssertEqual(info, SiteVideo.Info(title: "Koi Song", ext: "mp4", size: 1234))
+        XCTAssertNil(SiteVideo.info(Data("{}".utf8)))
+        let probe = SiteVideo.infoArguments(url: URL(string: "https://youtu.be/abc")!, quickJS: nil, audioOnly: false, referrer: nil,
+                                            cookies: nil, userAgent: nil, username: nil, password: nil)
+        XCTAssertTrue(probe.contains("-J"))
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("ndm-info-test.json")
+        try Data(json.utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let a = SiteVideo.arguments(url: URL(string: "https://youtu.be/abc")!, folder: "/o", temp: "/t", ffmpeg: nil, quickJS: nil,
+                                    audioOnly: false, referrer: nil, cookies: nil, userAgent: nil, username: nil, password: nil,
+                                    speedLimitKBps: 0, infoJSON: file.path)
+        XCTAssertEqual(Array(a.suffix(2)), ["--load-info-json", file.path])
+    }
 }

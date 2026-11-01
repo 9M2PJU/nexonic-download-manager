@@ -119,6 +119,7 @@ final class DownloadManager: ObservableObject {
         if site {
             record.siteVideo = true
             record.audioOnly = (job.audioOnly ?? o.audioOnly) ? true : nil
+            record.infoJSON = job.infoJSON
         }
         record.queueID = job.queue.map(queueID(named:)) ?? o.queueID
         record.username = job.username ?? (o.username.isEmpty ? nil : o.username)
@@ -185,6 +186,7 @@ final class DownloadManager: ObservableObject {
             try? FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
         }
         try? FileManager.default.removeItem(at: AppPaths.parts.appendingPathComponent(id.uuidString))
+        if let info = items.first(where: { $0.id == id })?.infoJSON { try? FileManager.default.removeItem(atPath: info) }
         items.removeAll { $0.id == id }
         persist()
         schedule()

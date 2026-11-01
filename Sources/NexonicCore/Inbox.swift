@@ -20,6 +20,7 @@ public struct DownloadJob: Codable, Equatable, Sendable {
     // From the browser extension: the size the browser reported and whether the user clicked the link (shows the download window)
     public var size: Int64?
     public var fromBrowser: Bool?
+    public var infoJSON: String?
 
     public init(url: String, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil, userAgent: String? = nil) {
         self.url = url

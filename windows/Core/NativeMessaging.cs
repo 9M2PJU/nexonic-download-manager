@@ -77,6 +77,7 @@ public sealed record DownloadJob(string Url, string? FileName = null, string? Re
     // From the browser extension: the size the browser reported and whether the user clicked the link (shows the download window)
     public long? Size { get; init; }
     public bool? FromBrowser { get; init; }
+    public string? InfoJson { get; init; }
 
     /// <summary>Only plain web links are accepted.</summary>
     public bool IsValid => Uri.TryCreate(Url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");

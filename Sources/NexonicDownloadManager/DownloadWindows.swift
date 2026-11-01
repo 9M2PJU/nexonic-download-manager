@@ -57,6 +57,7 @@ struct DownloadInfoView: View {
     @State private var size: Int64?
     @State private var checking = false
     @State private var audioOnly = false
+    @State private var infoPath: String?
 
     private var url: URL? { job.validURL }
     private var isSiteVideo: Bool { job.site == true || (url.map(SiteVideo.isSupported) ?? false) }
@@ -76,7 +77,7 @@ struct DownloadInfoView: View {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                 GridRow {
                     Text("Size").foregroundStyle(.secondary)
-                    if checking { HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking…") } }
+                    if checking { HStack(spacing: 6) { ProgressView().controlSize(.small); Text(isSiteVideo ? "Finding the best quality…" : "Checking…") } }
                     else { Text(size.map(bytes) ?? (isSiteVideo ? "Best quality (size known when the download starts)" : "Unknown")) }
                 }
                 GridRow {
@@ -128,7 +129,44 @@ struct DownloadInfoView: View {
         if let n = job.fileName, !n.isEmpty { name = FileNames.sanitize(n) }
         else if let url { name = isSiteVideo ? "Video from \(url.host ?? "site")" : FileNames.fromURL(url) }
         size = job.size
-        if size == nil, !isSiteVideo, job.stream != true, let url { probe(url) }
+        if isSiteVideo, let url { lookUpVideo(url) }
+        else if size == nil, job.stream != true, let url { probe(url) }
+    }
+
+    /// Looks the video up while the window is open (title, size, best quality), like a file's size is checked.
+    /// The details are saved and reused, so the download starts at once instead of looking the video up again.
+    private func lookUpVideo(_ url: URL) {
+        checking = true
+        let path = AppPaths.parts.appendingPathComponent("info-\(UUID().uuidString).json").path
+        let args = SiteVideo.infoArguments(url: url, quickJS: SiteVideoTools.quickJS, audioOnly: false, referrer: job.referrer,
+                                           cookies: job.cookies, userAgent: job.userAgent, username: nil, password: nil)
+        let fromJob = job.fileName != nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            SiteVideoTools.prepare()
+            try? FileManager.default.createDirectory(at: AppPaths.parts, withIntermediateDirectories: true)
+            let p = Process()
+            p.executableURL = SiteVideoTools.ytdlp
+            p.arguments = args
+            let out = Pipe()
+            p.standardOutput = out
+            p.standardError = FileHandle.nullDevice
+            var info: SiteVideo.Info?
+            if (try? p.run()) != nil {
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                if p.terminationStatus == 0, let i = SiteVideo.info(data), (try? data.write(to: URL(fileURLWithPath: path))) != nil {
+                    info = i
+                }
+            }
+            let found = info
+            Task { @MainActor in
+                checking = false
+                guard let found else { return }
+                infoPath = path
+                size = found.size
+                if !fromJob { name = FileNames.sanitize("\(found.title).\(found.ext)") }
+            }
+        }
     }
 
     /// Asks the server for the size (and the real file name) without downloading the file.
@@ -160,6 +198,7 @@ struct DownloadInfoView: View {
         job.fileName = name.trimmingCharacters(in: .whitespaces).isEmpty ? nil : name
         job.start = start
         job.audioOnly = audioOnly ? true : nil
+        job.infoJSON = infoPath
         var o = DownloadManager.AddOptions()
         o.folder = folder
         o.queueID = queueID
@@ -182,10 +221,11 @@ enum ProgressWindow {
             w.makeKeyAndOrderFront(nil)
             return
         }
-        guard manager.items.contains(where: { $0.id == id }) else { return }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 600),
+        guard let rec = manager.items.first(where: { $0.id == id }) else { return }
+        let compact = rec.siteVideo == true || rec.isStream == true  // no per-connection list to show
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: compact ? 400 : 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.contentMinSize = NSSize(width: 520, height: 420)
+        window.contentMinSize = NSSize(width: 520, height: compact ? 360 : 420)
         window.isReleasedWhenClosed = false
         window.title = "Download"
         let close = { [weak window] in
@@ -221,7 +261,7 @@ struct DownloadProgressView: View {
         Group {
             if let item { content(item) } else { Color.clear.onAppear(perform: close) }
         }
-        .frame(minWidth: 520, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 520, maxWidth: .infinity, minHeight: 360, maxHeight: .infinity, alignment: .top)
         .tint(brand)
         .onReceive(manager.$speeds) { s in
             history.append(s[id] ?? 0)
@@ -262,7 +302,15 @@ struct DownloadProgressView: View {
                     SegmentBar(segments: item.segments, size: item.size).frame(height: 12)
                     connections(item)
                 } else if item.isStream == true {
-                    Text("Video pieces: \(item.streamDone ?? 0) of \(item.streamTotal ?? 0)").font(.caption).foregroundStyle(.secondary)
+                    Text("Streamed video · pieces: \(item.streamDone ?? 0) of \(item.streamTotal ?? 0), joined into one .mp4")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if item.siteVideo == true {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.audioOnly == true ? "Video site · sound only" : "Video site · best quality, picture and sound joined")
+                        Text("Save to: \(item.folder.path)").lineLimit(1).truncationMode(.middle)
+                        if let path = item.savedPath { Text("Saved as: \((path as NSString).lastPathComponent)").lineLimit(1) }
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 }
             }
             if let e = item.error { Text(e).font(.caption).foregroundStyle(.red).lineLimit(2) }

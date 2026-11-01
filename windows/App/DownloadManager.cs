@@ -135,6 +135,7 @@ public sealed class DownloadManager
             IsStream = stream ? true : null,
             SiteVideo = site ? true : null,
             AudioOnly = site && (job.AudioOnly ?? o.AudioOnly) ? true : null,
+            InfoJson = site ? job.InfoJson : null,
         };
         Rows.Insert(0, new Row(rec, QueueName));
         Schedule();
@@ -198,6 +199,7 @@ public sealed class DownloadManager
     {
         if (transfers.Remove(row.Record.Id, out var t)) t.Discard();
         try { Directory.Delete(Path.Combine(AppPaths.Parts, row.Record.Id.ToString("N")), true); } catch { }
+        try { if (row.Record.InfoJson is { } info) File.Delete(info); } catch { }
         Rows.Remove(row);
         Save();
         Schedule();

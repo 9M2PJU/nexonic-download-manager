@@ -53,7 +53,10 @@ fi
 if pgrep -xq "NexonicDownloadManager"; then
   echo "Closing the running copy…"
   osascript -e "tell application \"$APP_NAME\" to quit" >/dev/null 2>&1 || true
-  sleep 2
+  # Wait until it has really quit, so the new version (not the old one still in memory) opens afterwards.
+  for _ in $(seq 1 20); do pgrep -xq "NexonicDownloadManager" || break; sleep 0.5; done
+  pkill -x "NexonicDownloadManager" 2>/dev/null || true
+  sleep 1
 fi
 
 target="$DEST/$APP_NAME.app"

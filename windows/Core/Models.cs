@@ -48,6 +48,8 @@ public sealed class DownloadRecord
     // Added in 0.4.0: videos from YouTube and other sites
     public bool? SiteVideo { get; set; }
     public bool? AudioOnly { get; set; }
+    // Added in 0.5.5: video details looked up while the download window was open (path of a yt-dlp info file)
+    public string? InfoJson { get; set; }
 
     public long Received { get { if (IsStream == true || SiteVideo == true) return StreamBytes ?? 0; lock (Segments) return Segments.Sum(s => s.Written); } }
     public double Progress => IsStream == true

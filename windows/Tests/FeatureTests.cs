@@ -190,4 +190,21 @@ public class SiteVideoTests
         Assert.Contains("Cookie:a=1", a);
         Assert.Contains("ba[ext=m4a]/ba/b", SiteVideo.Arguments("https://youtu.be/abc", "/o", "/t", null, null, true, null, null, null, null, null, 0));
     }
+
+    [Fact]
+    public void VideoInfoAndReuse()
+    {
+        const string json = "{\"title\":\"Koi Song\",\"ext\":\"mp4\",\"requested_formats\":[{\"filesize\":1000},{\"filesize_approx\":234}]}";
+        Assert.Equal(new SiteVideo.Info("Koi Song", "mp4", 1234), SiteVideo.ParseInfo(json));
+        Assert.Null(SiteVideo.ParseInfo("{}"));
+        Assert.Contains("-J", SiteVideo.InfoArguments("https://youtu.be/abc", null, false, null, null, null, null, null));
+        var file = Path.Combine(Path.GetTempPath(), "ndm-info-test.json");
+        File.WriteAllText(file, json);
+        try
+        {
+            var a = SiteVideo.Arguments("https://youtu.be/abc", "/o", "/t", null, null, false, null, null, null, null, null, 0, file);
+            Assert.Equal(new[] { "--load-info-json", file }, a.TakeLast(2).ToArray());
+        }
+        finally { File.Delete(file); }
+    }
 }

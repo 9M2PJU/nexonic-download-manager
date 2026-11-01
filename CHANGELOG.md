@@ -1,3 +1,12 @@
+## 0.5.5
+
+- **Videos start right away:** the download window now looks the video up while it is open, like IDM checks a file
+  (real title, file size and best quality, with "Finding the best quality…" meanwhile). Pressing Start reuses what was
+  found, so the download begins at once instead of waiting 10–15 seconds at 0%.
+- **Progress window for videos:** a compact window with real details (video site, best quality or sound only, folder,
+  saved file name) under Show Details, instead of an empty area.
+- **Installer:** waits until the running app has really quit, so the new version opens afterwards.
+
 ## 0.5.4
 
 - Releases include a plain zip of the Mac app, so the one-line Terminal installer is faster and quieter (no disk image to mount).

@@ -53,9 +53,60 @@ public static class SiteVideo
         return msg;
     }
 
+    public sealed record Info(string Title, string Ext, long? Size);
+
+    /// <summary>Video details older than this are looked up again (the links inside them expire).</summary>
+    public static readonly TimeSpan InfoMaxAge = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// The command that looks a video up without downloading it (prints its details as JSON). The saved JSON is handed to
+    /// Arguments(infoJson), so the download starts right away instead of looking the video up again.
+    /// </summary>
+    public static List<string> InfoArguments(string url, string? quickJs, bool audioOnly, string? referrer, string? cookies,
+        string? userAgent, string? username, string? password)
+    {
+        var a = new List<string> { "--ignore-config", "--no-playlist", "--no-colors", "-J", "--js-runtimes", "node", "--encoding", "utf-8" };
+        if (quickJs != null) a.AddRange(new[] { "--js-runtimes", $"quickjs:{quickJs}" });
+        if (audioOnly) a.AddRange(new[] { "-f", "ba[ext=m4a]/ba/b" });
+        else a.AddRange(new[] { "-f", "bv*+ba/b", "-S", "res,fps,hdr:12,vcodec:avc,acodec:m4a", "--merge-output-format", "mp4/mkv" });
+        if (!string.IsNullOrEmpty(referrer)) a.AddRange(new[] { "--referer", referrer });
+        if (!string.IsNullOrEmpty(userAgent)) a.AddRange(new[] { "--user-agent", userAgent });
+        if (!string.IsNullOrEmpty(cookies)) a.AddRange(new[] { "--add-header", $"Cookie:{cookies}" });
+        if (!string.IsNullOrEmpty(username)) a.AddRange(new[] { "--username", username, "--password", password ?? "" });
+        a.Add("--");
+        a.Add(url);
+        return a;
+    }
+
+    /// <summary>Title, file type and size from the JSON printed by InfoArguments.</summary>
+    public static Info? ParseInfo(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var o = doc.RootElement;
+            if (!o.TryGetProperty("title", out var t) || t.ValueKind != System.Text.Json.JsonValueKind.String) return null;
+            static long? Size(System.Text.Json.JsonElement e)
+            {
+                foreach (var k in new[] { "filesize", "filesize_approx" })
+                    if (e.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number) return (long)v.GetDouble();
+                return null;
+            }
+            var total = Size(o);
+            if (total == null && o.TryGetProperty("requested_formats", out var parts) && parts.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var sizes = parts.EnumerateArray().Select(Size).ToList();
+                if (sizes.Count > 0 && sizes.All(s => s != null)) total = sizes.Sum(s => s!.Value);
+            }
+            var ext = o.TryGetProperty("ext", out var x) && x.ValueKind == System.Text.Json.JsonValueKind.String ? x.GetString()! : "mp4";
+            return new Info(t.GetString()!, ext, total);
+        }
+        catch { return null; }
+    }
+
     /// <summary>The command for one video. folder gets the finished file, temp the partial one (so it can resume).</summary>
     public static List<string> Arguments(string url, string folder, string temp, string? ffmpeg, string? quickJs, bool audioOnly,
-        string? referrer, string? cookies, string? userAgent, string? username, string? password, int speedLimitKBps)
+        string? referrer, string? cookies, string? userAgent, string? username, string? password, int speedLimitKBps, string? infoJson = null)
     {
         var a = new List<string>
         {
@@ -77,8 +128,16 @@ public static class SiteVideo
         if (!string.IsNullOrEmpty(cookies)) a.AddRange(new[] { "--add-header", $"Cookie:{cookies}" });
         if (!string.IsNullOrEmpty(username)) a.AddRange(new[] { "--username", username, "--password", password ?? "" });
         if (speedLimitKBps > 0) a.AddRange(new[] { "--limit-rate", $"{speedLimitKBps}K" });
-        a.Add("--");
-        a.Add(url);
+        if (infoJson != null && File.Exists(infoJson) && DateTime.UtcNow - File.GetLastWriteTimeUtc(infoJson) < InfoMaxAge)
+        {
+            a.Add("--load-info-json"); // already looked up while the download window was open
+            a.Add(infoJson);
+        }
+        else
+        {
+            a.Add("--");
+            a.Add(url);
+        }
         return a;
     }
 }
@@ -188,7 +247,7 @@ public sealed class SiteVideoTransfer : IDownloader
         };
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         foreach (var arg in SiteVideo.Arguments(Record.Url, folder, Temp, FFmpeg.Path, SiteVideoTools.QuickJs, Record.AudioOnly == true,
-                     Record.Referrer, Record.Cookies, Record.UserAgent, Record.Username, Record.Password, speedLimitKBps))
+                     Record.Referrer, Record.Cookies, Record.UserAgent, Record.Username, Record.Password, speedLimitKBps, Record.InfoJson))
             psi.ArgumentList.Add(arg);
         try
         {

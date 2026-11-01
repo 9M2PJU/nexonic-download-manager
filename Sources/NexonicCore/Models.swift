@@ -57,6 +57,8 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
     // Added in 0.4.0: videos from YouTube and other sites
     public var siteVideo: Bool?
     public var audioOnly: Bool?
+    // Added in 0.5.5: video details looked up while the download window was open (path of a yt-dlp info file)
+    public var infoJSON: String?
 
     public init(url: URL, folder: URL, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil,
                 userAgent: String? = nil) {

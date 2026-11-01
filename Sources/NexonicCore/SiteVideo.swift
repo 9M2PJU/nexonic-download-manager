@@ -50,10 +50,49 @@ public enum SiteVideo {
         return msg
     }
 
+    /// What the download window shows for a video, read from the info the video engine looked up.
+    public struct Info: Equatable {
+        public var title: String
+        public var ext: String
+        public var size: Int64?
+    }
+
+    /// The command that looks a video up without downloading it (prints its details as JSON). The saved JSON is
+    /// handed to `arguments(infoJSON:)`, so the download starts right away instead of looking the video up again.
+    public static func infoArguments(url: URL, quickJS: String?, audioOnly: Bool, referrer: String?, cookies: String?,
+                                     userAgent: String?, username: String?, password: String?) -> [String] {
+        var a = ["--ignore-config", "--no-playlist", "--no-colors", "-J", "--js-runtimes", "node"]
+        if let quickJS { a += ["--js-runtimes", "quickjs:\(quickJS)"] }
+        a += audioOnly ? ["-f", "ba[ext=m4a]/ba/b"] : ["-f", "bv*+ba/b", "-S", "res,fps,hdr:12,vcodec:avc,acodec:m4a", "--merge-output-format", "mp4/mkv"]
+        if let referrer, !referrer.isEmpty { a += ["--referer", referrer] }
+        if let userAgent, !userAgent.isEmpty { a += ["--user-agent", userAgent] }
+        if let cookies, !cookies.isEmpty { a += ["--add-header", "Cookie:\(cookies)"] }
+        if let username, !username.isEmpty { a += ["--username", username, "--password", password ?? ""] }
+        a += ["--", url.absoluteString]
+        return a
+    }
+
+    /// Title, file type and size from the JSON printed by `infoArguments`.
+    public static func info(_ data: Data) -> Info? {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let title = o["title"] as? String else { return nil }
+        func size(_ d: [String: Any]) -> Int64? {
+            ((d["filesize"] as? NSNumber) ?? (d["filesize_approx"] as? NSNumber)).map { $0.int64Value }
+        }
+        var total = size(o)
+        if total == nil, let parts = o["requested_formats"] as? [[String: Any]] {
+            let sizes = parts.compactMap(size)
+            if sizes.count == parts.count, !sizes.isEmpty { total = sizes.reduce(0, +) }
+        }
+        return Info(title: title, ext: (o["ext"] as? String) ?? "mp4", size: total)
+    }
+
+    /// Video details older than this are looked up again (the links inside them expire).
+    public static let infoMaxAge: TimeInterval = 2 * 3600
+
     /// The command for one video. `folder` gets the finished file, `temp` the partial one (so it can resume).
     public static func arguments(url: URL, folder: String, temp: String, ffmpeg: String?, quickJS: String?, audioOnly: Bool,
                                  referrer: String?, cookies: String?, userAgent: String?, username: String?, password: String?,
-                                 speedLimitKBps: Int) -> [String] {
+                                 speedLimitKBps: Int, infoJSON: String? = nil) -> [String] {
         var a = [
             "--ignore-config", "--no-playlist", "--progress", "--newline", "--no-colors", "--no-mtime", "--continue",
             "--progress-template", "download:\(progressTag) %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s",
@@ -76,7 +115,12 @@ public enum SiteVideo {
         if let cookies, !cookies.isEmpty { a += ["--add-header", "Cookie:\(cookies)"] }
         if let username, !username.isEmpty { a += ["--username", username, "--password", password ?? ""] }
         if speedLimitKBps > 0 { a += ["--limit-rate", "\(speedLimitKBps)K"] }
-        a += ["--", url.absoluteString]
+        if let infoJSON, let attrs = try? FileManager.default.attributesOfItem(atPath: infoJSON),
+           let date = attrs[.modificationDate] as? Date, Date().timeIntervalSince(date) < infoMaxAge {
+            a += ["--load-info-json", infoJSON]  // already looked up while the download window was open
+        } else {
+            a += ["--", url.absoluteString]
+        }
         return a
     }
 }
@@ -194,7 +238,7 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
         p.arguments = SiteVideo.arguments(url: r.url, folder: folder.path, temp: temp.path, ffmpeg: FFmpeg.path,
                                           quickJS: SiteVideoTools.quickJS, audioOnly: r.audioOnly == true, referrer: r.referrer,
                                           cookies: r.cookies, userAgent: r.userAgent, username: r.username, password: r.password,
-                                          speedLimitKBps: speedLimitKBps)
+                                          speedLimitKBps: speedLimitKBps, infoJSON: r.infoJSON)
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
         p.standardError = err

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using Path = System.IO.Path;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
@@ -88,7 +89,7 @@ public static class DownloadWindows
             grid.Children.Add(value);
             rowIndex++;
         }
-        var size = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Text = job.Size is long s ? Nexonic.App.Row.Bytes(s) : site ? "Best quality (size known when the download starts)" : "Checking…" };
+        var size = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Text = job.Size is long s ? Nexonic.App.Row.Bytes(s) : site ? "Finding the best quality…" : "Checking…" };
         AddRow("Size", size);
         var category = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Text = FileCategories.Of(name.Text).ToString() };
         AddRow("Category", category);
@@ -116,6 +117,7 @@ public static class DownloadWindows
         root.Children.Add(never);
 
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+        string? infoPath = null;
         void Done(bool? start)
         {
             if (never.IsChecked == true)
@@ -133,7 +135,7 @@ public static class DownloadWindows
                     Start = go,
                     AudioOnly = audio.IsChecked == true,
                 };
-                var id = m.Add(job with { FileName = name.Text.Trim().Length > 0 ? name.Text.Trim() : null, Start = go }, o);
+                var id = m.Add(job with { FileName = name.Text.Trim().Length > 0 ? name.Text.Trim() : null, Start = go, InfoJson = infoPath }, o);
                 if (go && id is Guid g && m.Settings.ShowProgressWindow && m.Rows.FirstOrDefault(r => r.Record.Id == g) is { } row)
                     ShowProgress(m, row);
             }
@@ -149,7 +151,52 @@ public static class DownloadWindows
         w.Show();
         w.Activate();
 
-        if (job.Size is null && !site && job.Stream != true) _ = ProbeAsync(m, job, size, name);
+        if (site) _ = LookUpVideoAsync(job, size, name, p => infoPath = p);
+        else if (job.Size is null && job.Stream != true) _ = ProbeAsync(m, job, size, name);
+    }
+
+    /// <summary>
+    /// Looks the video up while the window is open (title, size, best quality). The details are saved and reused, so the
+    /// download starts at once instead of looking the video up again.
+    /// </summary>
+    static async Task LookUpVideoAsync(DownloadJob job, TextBlock size, TextBox name, Action<string> found)
+    {
+        size.Text = "Finding the best quality…";
+        var path = Path.Combine(AppPaths.Parts, $"info-{Guid.NewGuid():N}.json");
+        var result = await Task.Run(() =>
+        {
+            try
+            {
+                SiteVideoTools.Prepare();
+                if (!File.Exists(SiteVideoTools.YtDlp)) return ((SiteVideo.Info?)null, "");
+                Directory.CreateDirectory(AppPaths.Parts);
+                var psi = new ProcessStartInfo(SiteVideoTools.YtDlp)
+                {
+                    CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8,
+                };
+                psi.Environment["PYTHONIOENCODING"] = "utf-8";
+                foreach (var a in SiteVideo.InfoArguments(job.Url, SiteVideoTools.QuickJs, false, job.Referrer, job.Cookies, job.UserAgent, null, null))
+                    psi.ArgumentList.Add(a);
+                using var p = Process.Start(psi)!;
+                p.ErrorDataReceived += (_, _) => { };
+                p.BeginErrorReadLine();
+                var json = p.StandardOutput.ReadToEnd();
+                p.WaitForExit();
+                var info = p.ExitCode == 0 ? SiteVideo.ParseInfo(json) : null;
+                if (info != null) File.WriteAllText(path, json);
+                return (info, json);
+            }
+            catch { return ((SiteVideo.Info?)null, ""); }
+        });
+        if (result.Item1 is not { } info)
+        {
+            size.Text = "Best quality (size known when the download starts)";
+            return;
+        }
+        found(path);
+        size.Text = info.Size is long s ? Nexonic.App.Row.Bytes(s) : "Best quality";
+        if (string.IsNullOrEmpty(job.FileName)) name.Text = FileNames.Sanitize($"{info.Title}.{info.Ext}");
     }
 
     /// <summary>Asks the server for the size (and the real file name) without downloading the file.</summary>
@@ -320,8 +367,17 @@ public static class DownloadWindows
             area.Points = poly;
 
             var plain = r.IsStream != true && r.SiteVideo != true && r.Segments.Count > 0;
-            segCaption.Visibility = segments.Visibility = conns.Visibility = plain ? Visibility.Visible : Visibility.Collapsed;
-            if (!plain) return;
+            segments.Visibility = conns.Visibility = plain ? Visibility.Visible : Visibility.Collapsed;
+            if (!plain)
+            {
+                segCaption.Text = r.SiteVideo == true
+                    ? (r.AudioOnly == true ? "Video site · sound only" : "Video site · best quality, picture and sound joined") + $"\nSave to: {r.Folder}"
+                    : r.IsStream == true ? $"Streamed video · pieces: {r.StreamDone ?? 0} of {r.StreamTotal ?? 0}, joined into one .mp4" : "";
+                segCaption.Visibility = segCaption.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                return;
+            }
+            segCaption.Text = "Start positions and progress by connection";
+            segCaption.Visibility = Visibility.Visible;
             List<Segment> segs;
             lock (r.Segments) segs = r.Segments.Select(x => new Segment { Id = x.Id, Start = x.Start, End = x.End, Written = x.Written }).ToList();
             var key = string.Join(",", segs.Select(x => x.Written)) + r.Status;
