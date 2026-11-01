@@ -9,7 +9,8 @@ struct NexonicDownloadManagerApp: App {
     init() { HostInstaller.install() }
 
     var body: some Scene {
-        WindowGroup("Nexonic Download Manager", id: "main") {
+        // A single main window: links from the browser are added to it instead of opening another window.
+        Window("Nexonic Download Manager", id: "main") {
             ContentView()
                 .environmentObject(manager)
                 .frame(minWidth: 900, minHeight: 480)

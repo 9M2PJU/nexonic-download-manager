@@ -18,8 +18,12 @@ public partial class App : Application
         single = new Mutex(true, "Nexonic.DownloadManager.Single", out var first);
         if (!first)
         {
-            // Another copy runs: wake it (it then reads the inbox) and quit.
-            try { using var c = new NamedPipeClientStream(".", PipeName, PipeDirection.Out); c.Connect(1000); } catch { }
+            // Another copy runs: wake it (it adds the new downloads and shows its window) and quit. Never open a second window.
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try { using var c = new NamedPipeClientStream(".", PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly); c.Connect(1500); break; }
+                catch { Thread.Sleep(200); }
+            }
             Shutdown();
             return;
         }
@@ -68,17 +72,25 @@ public partial class App : Application
     void ShowWindow()
     {
         window!.Show();
-        window.WindowState = WindowState.Normal;
+        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         window.Activate();
+        window.Topmost = true;   // bring the existing window to the front, then let it behave normally again
+        window.Topmost = false;
+        window.Focus();
     }
 
     async Task ListenAsync(DownloadManager manager)
     {
         while (true)
         {
-            using var server = new NamedPipeServerStream(PipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            await server.WaitForConnectionAsync();
-            Dispatcher.Invoke(() => { manager.CollectInbox(); ShowWindow(); });
+            try
+            {
+                using var server = new NamedPipeServerStream(PipeName, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances,
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await server.WaitForConnectionAsync();
+                Dispatcher.Invoke(() => { manager.CollectInbox(); ShowWindow(); });
+            }
+            catch { await Task.Delay(500); }
         }
     }
 

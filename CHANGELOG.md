@@ -1,3 +1,9 @@
+## 0.4.5
+
+- **One app window only:** downloads sent from the browser are added to the app that is already running instead of
+  opening another window. Opening the app again brings the running window to the front (Mac and Windows).
+- New releases are published automatically once the Mac and Windows files are built.
+
 ## 0.4.4
 
 - **Terms of Use and License Agreement:** shown when you open the Mac disk image (Agree / Disagree) and in the Windows
