@@ -129,6 +129,7 @@
   document.addEventListener(
     "mouseover",
     (e) => {
+      if (!enabled) return;
       const el = e.target && e.target.closest ? e.target.closest("video, audio") : null;
       if (el) show(el);
       else if (target && !host.contains(e.target)) {
@@ -142,6 +143,16 @@
     },
     true,
   );
-  addEventListener("scroll", place, true);
-  addEventListener("resize", place);
+  // Re-position at most once per frame, and only while the button is showing.
+  let queued = false;
+  const placeSoon = () => {
+    if (!target || queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      place();
+    });
+  };
+  addEventListener("scroll", placeSoon, { capture: true, passive: true });
+  addEventListener("resize", placeSoon, { passive: true });
 })();

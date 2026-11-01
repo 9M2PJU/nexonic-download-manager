@@ -1,3 +1,13 @@
+## 0.5.8
+
+- **Browser extension uses much less processing power:** it no longer inspects every request of every page, only the
+  ones that can be audio, video or a stream playlist, and the video button re-positions at most once per frame while
+  scrolling. Busy sites in Firefox and Chrome no longer keep the extension working in the background.
+
+## 0.5.7
+
+- Published by mistake from the 0.5.6 code; use 0.5.8.
+
 ## 0.5.6
 
 - **Fix: wrong video size and progress.** Videos downloaded in many small pieces could show a size and amount far too

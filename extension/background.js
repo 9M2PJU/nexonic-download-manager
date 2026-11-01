@@ -156,8 +156,7 @@ async function addStream(tabId, url) {
   });
 }
 
-chrome.webRequest.onResponseStarted.addListener(
-  async (d) => {
+async function onMediaResponse(d) {
     if (d.tabId < 0 || d.statusCode >= 400) return;
     // On video sites the app's video engine saves the whole video, so the small pieces the player loads are skipped.
     if (isVideoSite(d.initiator || d.documentUrl || d.originUrl || "")) return;
@@ -168,10 +167,15 @@ chrome.webRequest.onResponseStarted.addListener(
     if (!isMedia(d.url, type, Number.isFinite(total) ? total : -1)) return;
     const item = { url: d.url, name: nameFromUrl(d.url), size: total > 0 ? total : -1, type: type.split(";")[0] };
     await serial(async () => setMedia(d.tabId, sortMedia(addMedia(await mediaOf(d.tabId), item))));
-  },
-  { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "other", "object"] },
-  ["responseHeaders"],
-);
+}
+
+// Only responses that can be audio, video or a stream playlist reach the extension: players' own requests (media, object)
+// and script requests whose address looks like a media file. Watching every request of every page cost a lot of
+// processing on busy sites.
+const MEDIA_URLS = ["m3u8", "mpd", "mp4", "m4v", "m4a", "webm", "mkv", "mov", "mp3", "aac", "flac", "ogg", "opus", "wav"]
+  .map((ext) => `*://*/*.${ext}*`);
+chrome.webRequest.onResponseStarted.addListener(onMediaResponse, { urls: ["<all_urls>"], types: ["media", "object"] }, ["responseHeaders"]);
+chrome.webRequest.onResponseStarted.addListener(onMediaResponse, { urls: MEDIA_URLS, types: ["xmlhttprequest", "other"] }, ["responseHeaders"]);
 
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status === "loading" && change.url) {
