@@ -21,8 +21,10 @@ enum Demo {
         let name = env["NDM_NAME"] ?? "main"
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_000_000_000)
+            NSApp.activate(ignoringOtherApps: true)
             if let w = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && !($0 is NSPanel) }) {
                 w.setFrame(NSRect(x: 80, y: 80, width: 1240, height: 720), display: true)
+                w.makeKeyAndOrderFront(nil)
             }
             if let sheet { open(sheet) }
             guard let dir else { return }

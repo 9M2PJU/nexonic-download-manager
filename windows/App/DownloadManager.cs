@@ -493,7 +493,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
         DownloadStatus.Finished => Record.ChecksumResult?.Contains("not") == true ? Theme.Bad : Theme.Good,
         _ => Theme.Bad,
     };
-    public string Added => Record.Added.ToString("g");
+    public string Added => Record.Added.ToString("d MMM yyyy, HH:mm");
     public string Category => Record.Category.ToString();
 
     public void Tick()

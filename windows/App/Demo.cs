@@ -22,10 +22,10 @@ public static class Demo
         if (Env("NDM_DEMO") != "1") return;
         Seed(m);
         window.BuildSidebar();
-        window.Width = 1240;
-        window.Height = 720;
-        window.Left = 40;
-        window.Top = 20;
+        window.Width = Math.Min(1240, SystemParameters.WorkArea.Width - 20);
+        window.Height = Math.Min(720, SystemParameters.WorkArea.Height - 20);
+        window.Left = 10;
+        window.Top = 10;
         var sheet = Env("NDM_SHEET");
         var dir = Env("NDM_SNAPSHOT");
         var name = Env("NDM_NAME") ?? "main";

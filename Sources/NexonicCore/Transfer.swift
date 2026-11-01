@@ -247,10 +247,8 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             dataTask.cancel()  // the range may have been shortened by a split
         } else {
             let wait = max(limiter.consume(chunk.count), ownLimiter.consume(chunk.count))
-            if wait > 0 {
-                dataTask.suspend()
-                queue.asyncAfter(deadline: .now() + wait) { [weak dataTask] in dataTask?.resume() }
-            }
+            // Holding this (serial) delegate queue makes the connection stop reading, which is what limits the speed.
+            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
         }
         notify()
     }

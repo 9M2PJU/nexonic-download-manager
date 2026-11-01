@@ -156,7 +156,7 @@
             </ContextMenu>
           </DataGrid.ContextMenu>
           <DataGrid.Columns>
-            <DataGridTemplateColumn Header="File Name" Width="*" SortMemberPath="Name">
+            <DataGridTemplateColumn Header="File Name" Width="*" MinWidth="230" SortMemberPath="Name">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate>
                   <StackPanel Orientation="Horizontal">
@@ -167,13 +167,13 @@
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
             <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="80" />
-            <DataGridTemplateColumn Header="Progress" Width="120">
+            <DataGridTemplateColumn Header="Progress" Width="100">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate><ProgressBar Value="{Binding Percent, Mode=OneWay}" Height="10" Margin="4,0" Foreground="{StaticResource Accent}" /></DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn Header="Speed" Binding="{Binding Speed}" Width="90" />
-            <DataGridTextColumn Header="Time Left" Binding="{Binding TimeLeft}" Width="80" />
+            <DataGridTextColumn Header="Speed" Binding="{Binding Speed}" Width="80" />
+            <DataGridTextColumn Header="Time Left" Binding="{Binding TimeLeft}" Width="70" />
             <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="Status">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate>
@@ -184,8 +184,8 @@
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn Header="Queue" Binding="{Binding Queue}" Width="100" />
-            <DataGridTextColumn Header="Added" Binding="{Binding Added}" Width="130" />
+            <DataGridTextColumn Header="Queue" Binding="{Binding Queue}" Width="90" />
+            <DataGridTextColumn Header="Added" Binding="{Binding Added}" Width="120" />
           </DataGrid.Columns>
         </DataGrid>
         <StackPanel x:Name="Empty" Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" MaxWidth="400">
