@@ -43,8 +43,8 @@ saves the post the video belongs to.
 **Any other website:** the extension finds ordinary video and audio files and streamed video (HLS) on the page, lists
 them best quality first, and the app saves streams as one `.mp4` named after the page.
 
-Everything needed is built in: the app ships with yt-dlp (kept up to date automatically, because sites change often),
-a small ffmpeg and QuickJS. Nothing else to install.
+Everything needed is built in, and the video engine keeps itself up to date because sites change often. Nothing else
+to install.
 
 Copy-protected services (Netflix, Disney+, Prime Video, Spotify and similar DRM) are not supported. Only download
 videos you have the right to save, and follow each site's terms of use.
@@ -146,8 +146,8 @@ state, file type and queue, and the status bar shows how many are running and th
   into one `.mp4`, resumable. Paste a `.m3u8` link into **Add URL** or use the browser button.
 - **Categories:** Compressed, Documents, Music, Video, Programs, Images; optionally saved into category folders.
 - **Video sites:** YouTube, Instagram, Facebook, X, TikTok and 1,000+ more, in the best quality or sound only.
-- **All included:** one download, nothing else to install. The app carries yt-dlp (Unlicense), QuickJS (MIT) and a
-  small ffmpeg (LGPL, re-packing only); see `VIDEO-ENGINE-LICENSES.txt` and `FFMPEG-LICENSE.txt` in the app.
+- **All included:** one download, nothing else to install (open-source licence notices for the parts the app ships
+  with are in `THIRD-PARTY-NOTICES.txt` inside the app).
 - **Private:** no account, no tracking, nothing sent anywhere except the downloads you start.
 
 ## Command line

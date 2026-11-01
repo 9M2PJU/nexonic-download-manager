@@ -12,7 +12,7 @@ public protocol Downloader: AnyObject {
 extension Transfer: Downloader {}
 
 /// Downloads streamed video (HLS): picks the best quality, fetches the pieces in parallel, resumes after a pause or
-/// restart, joins them and, when ffmpeg is installed, turns the result into one .mp4 with picture and sound.
+/// restart, joins them and, with the built-in video tools, turns the result into one .mp4 with picture and sound.
 public final class StreamTransfer: Downloader, @unchecked Sendable {
     public var onChange: (@Sendable (DownloadRecord) -> Void)?
     public let ownLimiter = SpeedLimiter()
@@ -242,7 +242,7 @@ public final class StreamTransfer: Downloader, @unchecked Sendable {
             if joined.count > 1 {
                 let audio = FileNames.unique(base + " (sound)." + ext(joined[1].0), in: folder)
                 try FileManager.default.moveItem(at: joined[1].1, to: audio)
-                change { $0.error = "Picture and sound were saved as two files. Install ffmpeg to get one .mp4 next time." }
+                change { $0.error = "Picture and sound were saved as two files." }
             }
         }
         try? FileManager.default.removeItem(at: partsFolder)

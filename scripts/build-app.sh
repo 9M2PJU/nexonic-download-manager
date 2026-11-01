@@ -19,11 +19,11 @@ cp "$BIN/nexonic-host" "$APP/Contents/MacOS/"
 # Small bundled ffmpeg (re-packs streamed video into .mp4); built once and kept in .ffmpeg-cache/.
 if [ ! -x .ffmpeg-cache/mac/ffmpeg ]; then bash scripts/build-ffmpeg.sh mac .ffmpeg-cache/mac; fi
 cp .ffmpeg-cache/mac/ffmpeg .ffmpeg-cache/mac/ffprobe "$APP/Contents/MacOS/"
-cp .ffmpeg-cache/mac/FFMPEG-LICENSE.txt "$APP/Contents/Resources/"
 # Video engine for YouTube and other sites (yt-dlp + QuickJS); fetched fresh unless .tools-cache/mac already has it.
 if [ ! -x .tools-cache/mac/yt-dlp ]; then bash scripts/fetch-video-tools.sh mac .tools-cache/mac; fi
 cp .tools-cache/mac/yt-dlp .tools-cache/mac/qjs "$APP/Contents/MacOS/"
-cp .tools-cache/mac/VIDEO-ENGINE-LICENSES.txt "$APP/Contents/Resources/"
+cat packaging/THIRD-PARTY-NOTICES.txt .ffmpeg-cache/mac/NOTICE-video-tools-1.txt .tools-cache/mac/NOTICE-video-tools-2.txt \
+  > "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt"
 sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
 cp -R build/extension-chrome "$APP/Contents/Resources/Extension"
 cp "build/NexonicFirefoxAddon-$VERSION.xpi" "$APP/Contents/Resources/Firefox Add-on.xpi"

@@ -49,7 +49,7 @@ case "$TARGET" in
   *) echo "usage: $0 mac|windows|native OUT_DIR" >&2; exit 2 ;;
 esac
 
-cat > "$OUT/FFMPEG-LICENSE.txt" <<TXT
+cat > "$OUT/NOTICE-video-tools-1.txt" <<TXT
 This app includes ffmpeg and ffprobe ($VERSION), used only to re-pack downloaded video (no re-encoding).
 ffmpeg is licensed under the GNU Lesser General Public License, version 2.1 or later.
 Source: https://github.com/FFmpeg/FFmpeg/tree/$VERSION

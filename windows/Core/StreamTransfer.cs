@@ -218,7 +218,7 @@ public sealed class StreamTransfer : IDownloader
             if (joined.Count > 1)
             {
                 File.Move(joined[1].File, FileNames.Unique(baseName + " (sound)" + Ext(joined[1].Name, joined[1].Media), folder));
-                Record.Error = "Picture and sound were saved as two files. Install ffmpeg to get one .mp4 next time.";
+                Record.Error = "Picture and sound were saved as two files.";
             }
         }
         try { Directory.Delete(PartsFolder, true); } catch { }

@@ -1,0 +1,4 @@
+Nexonic Download Manager by Shahrukh Khalid (MIT License).
+
+The app ships with these open-source parts, used unmodified. Their licences require this notice.
+

@@ -27,8 +27,7 @@ case "$TARGET" in
   *) echo "usage: $0 mac|windows OUT_DIR" >&2; exit 2 ;;
 esac
 
-cat > "$OUT/VIDEO-ENGINE-LICENSES.txt" <<TXT
-This app includes:
+cat > "$OUT/NOTICE-video-tools-2.txt" <<TXT
 - yt-dlp (public domain, The Unlicense): https://github.com/yt-dlp/yt-dlp
   The app keeps its own copy up to date once a day, because video sites change often.
 - QuickJS-ng $QJS (MIT License): https://github.com/quickjs-ng/quickjs

@@ -3,8 +3,8 @@
 - **YouTube, Instagram, Facebook, X (Twitter), TikTok, Vimeo, Reddit and 1,000+ other sites:** save videos in the best
   quality (up to 4K/8K) or sound only, from the video button, the extension popup, the right-click menu, Add URL or `ndm`.
   Feeds work too: the button saves the post a video belongs to.
-- Built-in video engine (yt-dlp, kept up to date automatically, plus QuickJS), and the bundled ffmpeg now also joins
-  WebM/VP9/AV1 and Opus. Nothing else to install.
+- Built-in video engine that keeps itself up to date, and it now also joins WebM/VP9/AV1 and Opus. Nothing else to
+  install.
 - Copy-protected services stay unsupported.
 
 ## 0.3.0
@@ -13,8 +13,7 @@
   them best quality first (for example 1080p) with the page's title as the name, and hides the lower qualities.
 - The app downloads the highest resolution and bit rate, fetches the pieces in parallel, resumes after a pause or
   restart, and joins picture and sound into one `.mp4`.
-- Everything is included: the app carries a small built-in ffmpeg (LGPL, re-packing only), so streamed video always
-  comes out as one `.mp4` with no extra installs.
+- Everything is included, so streamed video always comes out as one `.mp4` with no extra installs.
 - Copy-protected videos are shown as protected instead of failing later.
 - README shows real screenshots of the Mac and Windows apps, taken automatically from each build.
 - Paste a `.m3u8` link into Add URL, or use `ndm https://…/master.m3u8`.
