@@ -1,3 +1,7 @@
+## 0.6.1
+
+- Fix: the Windows build of 0.6.0 (same features as 0.6.0 below).
+
 ## 0.6.0
 
 - **In-app updates:** when a new version is released, the app tells you when it opens (and once a day while it runs),

@@ -331,7 +331,7 @@ public static class DownloadWindows
             w.Title = $"{(int)pct}% {r.FileName}";
             fileName.Text = r.FileName;
             values[0].Text = row.PreparingVideo ? "Preparing video… (finding the best quality)"
-                : r.IsActive && r.VideoStep is { } step ? step : r.Status switch
+                : r.IsActive && r.VideoStep is { } videoStep ? videoStep : r.Status switch
             {
                 DownloadStatus.Queued => "Waiting in queue",
                 DownloadStatus.Probing => "Connecting…",
