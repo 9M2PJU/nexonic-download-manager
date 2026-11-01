@@ -1,0 +1,90 @@
+# Nexonic Download Manager Help
+
+The same guide is built into the app: **Help → Nexonic Download Manager Help** (⌘?) on Mac, the **Help** button (F1) on Windows. Shortcuts below use Mac keys; on Windows use Ctrl instead of ⌘.
+
+## Contents
+
+- [Getting Started](#getting-started)
+- [Browser Extension](#browser-extension)
+- [Saving Videos](#saving-videos)
+- [Queues and Scheduler](#queues-and-scheduler)
+- [Batch and Site Grabber](#batch-and-site-grabber)
+- [Speed and Settings](#speed-and-settings)
+- [Command Line](#command-line)
+- [Troubleshooting](#troubleshooting)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+
+## Getting Started
+
+**Add a download.** Click Add URL (⌘N), paste one or more links and press Start Download. Links you copy are offered automatically when the Add window opens.
+
+**Pause and resume.** Select a download and press Stop or Resume. Downloads continue where they stopped, even after you quit the app or restart the Mac.
+
+**Find your files.** Finished files are saved in the folder chosen in the Add window (your Downloads folder by default). Double-click a download to open it, or right-click and choose Show in Finder.
+
+## Browser Extension
+
+**Chrome, Edge, Brave and Opera.** Open the app once. Unzip NexonicExtension-Chrome.zip, open the browser's extensions page, turn on Developer mode, click Load unpacked and choose the folder. You can also save the extension folder from Settings, under Browsers & Command Line.
+
+**Firefox.** Drag NexonicAddon-Firefox.xpi onto Firefox. For a quick test, open about:debugging and choose Load Temporary Add-on.
+
+**What it does.** Downloads from the browser are handed to the app automatically. Right-click a link and choose Download with Nexonic, or use the video button that appears on pages with video.
+
+## Saving Videos
+
+**From a website.** Click the video button the extension shows on the page, or paste the page link into Add URL. Videos are saved in the best available quality as .mp4.
+
+**Sound only.** Choose Sound only in the Add window to save just the audio.
+
+**Streamed video.** Streams (.m3u8) are found by the extension, downloaded in parallel and joined into one .mp4. Copy-protected services are not supported.
+
+## Queues and Scheduler
+
+**Queues.** Put downloads in a queue to run them one after another or a few at a time. Right-click a download and choose Move to Queue.
+
+**Scheduler.** Start a queue at a set time, stop it at another, and optionally quit the app, sleep or shut down the Mac when it is done.
+
+## Batch and Site Grabber
+
+**Batch download.** Download a numbered series such as file01.jpg to file50.jpg by writing the link once with a pattern, for example file[01-50].jpg.
+
+**Site Grabber.** Enter a page address to list every file linked from it, filter by type and download the ones you check.
+
+## Speed and Settings
+
+**Faster downloads.** Each file is split into parts that download at the same time. Change Connections per download in Settings (up to 32).
+
+**Speed limit.** Set a limit for all downloads in Settings, or for one download in its Properties.
+
+**Proxy and sign-in.** Set a proxy in Settings. For password-protected downloads, add the user name and password in the Add window or under Properties.
+
+## Command Line
+
+**Install.** Open Settings, go to Browsers & Command Line and click Install ndm Command…. Then open Terminal and type ndm help.
+
+**Examples.** ndm https://example.com/file.zip adds a download. ndm https://example.com/file.zip --queue Night adds it to a queue, and ndm help lists every option.
+
+## Troubleshooting
+
+**A link has expired.** Right-click the download, choose Refresh Link and paste a fresh link. The download continues without starting over.
+
+**macOS won't open the app.** Open System Settings, then Privacy & Security, and click Open Anyway. On macOS 13 and 14 you can also right-click the app and choose Open.
+
+**The browser doesn't hand over downloads.** Open the app once so it can register itself with your browsers, then restart the browser.
+
+**A video site stopped working.** The video engine updates itself every day. Try again later, and if it still fails, report the problem with the page link.
+
+## Keyboard Shortcuts
+
+**Downloads.** ⌘N  Add URL  
+⇧⌘P  Stop all  
+⇧⌘R  Resume all  
+⌘,  Settings  
+⌘?  Help
+
+## Still stuck?
+
+- [Report a problem](https://github.com/Shahrukhalid/nexonic-download-manager/issues/new) (include your system, the app version from About, and the link if it is public).
+- [Latest version and release notes](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest)
+
+Made by [Shahrukh Khalid](https://www.shahrukhalid.com) · [GitHub](https://github.com/Shahrukhalid) · MIT License

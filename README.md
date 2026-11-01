@@ -42,6 +42,8 @@ Everything is included. Nothing else to install.
 - **Firefox:** drag the `.xpi` onto Firefox. Firefox only installs signed add-ons; for a quick test use
   `about:debugging` → **Load Temporary Add-on**.
 
+Need help? Read the **[user guide](docs/HELP.md)** (also built into the app: Help menu on Mac, F1 on Windows).
+
 ## Features
 
 - **Fast downloads** that split each file into parts and download them at the same time.

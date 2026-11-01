@@ -15,6 +15,7 @@ struct NexonicDownloadManagerApp: App {
                 .frame(minWidth: 900, minHeight: 480)
         }
         .commands {
+            AppCommands()
             CommandGroup(after: .newItem) {
                 Button("Stop All") { manager.pauseAll() }.keyboardShortcut("p", modifiers: [.command, .shift])
                 Button("Resume All") { manager.resumeAll() }.keyboardShortcut("r", modifiers: [.command, .shift])
@@ -23,9 +24,43 @@ struct NexonicDownloadManagerApp: App {
         Settings {
             SettingsView().environmentObject(manager)
         }
+        Window("About Nexonic Download Manager", id: "about") {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
+        Window("Nexonic Download Manager Help", id: "help") {
+            HelpView()
+        }
         MenuBarExtra("Nexonic", systemImage: "arrow.down.circle") {
             MenuBarView().environmentObject(manager)
         }
+    }
+}
+
+/// Replaces the standard About panel and the empty Help menu.
+struct AppCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Nexonic Download Manager") { show("about") }
+            Button("Check for Updates…") { AppLinks.open(AppLinks.releases) }
+        }
+        CommandGroup(replacing: .help) {
+            Button("Nexonic Download Manager Help") { show("help") }.keyboardShortcut("?", modifiers: .command)
+            Button("Online Help") { AppLinks.open(AppLinks.onlineHelp) }
+            Divider()
+            Button("Report a Problem…") { AppLinks.open(AppLinks.reportProblem) }
+            Button("Release Notes") { AppLinks.open(AppLinks.releases) }
+            Divider()
+            Button("Website") { AppLinks.open(AppLinks.website) }
+            Button("Source Code on GitHub") { AppLinks.open(AppLinks.project) }
+        }
+    }
+
+    private func show(_ id: String) {
+        openWindow(id: id)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 

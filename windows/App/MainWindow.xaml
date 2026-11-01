@@ -107,6 +107,12 @@
         <Button Style="{StaticResource ToolButton}" Click="OnSettings" ToolTip="Options">
           <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE713;" /><TextBlock Style="{StaticResource Caption}" Text="Options" /></StackPanel>
         </Button>
+        <Button Style="{StaticResource ToolButton}" Click="OnHelp" ToolTip="Help (F1)">
+          <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE897;" /><TextBlock Style="{StaticResource Caption}" Text="Help" /></StackPanel>
+        </Button>
+        <Button Style="{StaticResource ToolButton}" Click="OnAbout" ToolTip="About Nexonic Download Manager">
+          <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE946;" /><TextBlock Style="{StaticResource Caption}" Text="About" /></StackPanel>
+        </Button>
         <Border Margin="12,6,4,6" Width="220" Height="30" CornerRadius="6" BorderBrush="#D0D7DE" BorderThickness="1" Background="White" VerticalAlignment="Center">
           <Grid>
             <TextBlock Text="&#xE721;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="#8B949E" Margin="8,0,0,0" VerticalAlignment="Center" />

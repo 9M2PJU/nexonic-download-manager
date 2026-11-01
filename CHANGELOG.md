@@ -1,3 +1,12 @@
+## 0.4.3
+
+- **Help:** a built-in Help window on Mac (Help menu, ⌘?) and Windows (Help button, F1) with topics for getting started,
+  the browser extension, videos, queues, batch and grabber, settings, the command line, troubleshooting and shortcuts.
+  The same guide is online in docs/HELP.md.
+- **About:** a new About window with the version, "Made by Shahrukh Khalid", links to the website, GitHub, source code
+  and problem reports, the license and a Check for Updates button.
+- Help menu on Mac: Online Help, Report a Problem, Release Notes, Website and Source Code.
+
 ## 0.4.2
 
 - New app icon on Mac, Windows and in the browser extension.

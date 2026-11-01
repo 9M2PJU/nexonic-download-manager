@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         InputBindings.Add(new KeyBinding(new Cmd(() => OnAdd(this, new RoutedEventArgs())), Key.N, ModifierKeys.Control));
         InputBindings.Add(new KeyBinding(new Cmd(() => OnRemove(this, new RoutedEventArgs())), Key.Delete, ModifierKeys.None));
         InputBindings.Add(new KeyBinding(new Cmd(() => Search.Focus()), Key.F, ModifierKeys.Control));
+        InputBindings.Add(new KeyBinding(new Cmd(() => HelpWindows.ShowHelp(this)), Key.F1, ModifierKeys.None));
         UpdateStatus();
         var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         timer.Tick += (_, _) => { ShowDetails(); UpdateStatus(); };
@@ -206,6 +207,8 @@ public partial class MainWindow : Window
     void OnGrabber(object s, RoutedEventArgs e) => Dialogs.Grabber(this, manager, CurrentQueue);
     void OnBatch(object s, RoutedEventArgs e) => Dialogs.Batch(this, manager, CurrentQueue);
     void OnSettings(object s, RoutedEventArgs e) => Dialogs.Options(this, manager);
+    void OnHelp(object s, RoutedEventArgs e) => HelpWindows.ShowHelp(this);
+    void OnAbout(object s, RoutedEventArgs e) => HelpWindows.ShowAbout(this);
 
     void OnRemoveFile(object s, RoutedEventArgs e)
     {
