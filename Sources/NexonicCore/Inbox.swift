@@ -15,6 +15,8 @@ public struct DownloadJob: Codable, Equatable, Sendable {
     public var checksum: String?
     public var speedLimitKBps: Int?
     public var stream: Bool?
+    public var site: Bool?
+    public var audioOnly: Bool?
 
     public init(url: String, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil, userAgent: String? = nil) {
         self.url = url

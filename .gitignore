@@ -8,3 +8,4 @@ node_modules/
 windows/**/bin/
 windows/**/obj/
 .ffmpeg-cache/
+.tools-cache/

@@ -159,3 +159,39 @@ final class HLSTests: XCTestCase {
         XCTAssertTrue(HLS.isPlaylistURL(URL(string: "https://e.com/live/index.M3U8?token=1")!))
     }
 }
+
+final class SiteVideoTests: XCTestCase {
+    func testSupportedSites() {
+        XCTAssertTrue(SiteVideo.isSupported(URL(string: "https://www.youtube.com/watch?v=abc")!))
+        XCTAssertTrue(SiteVideo.isSupported(URL(string: "https://youtu.be/abc")!))
+        XCTAssertTrue(SiteVideo.isSupported(URL(string: "https://m.facebook.com/watch/?v=1")!))
+        XCTAssertTrue(SiteVideo.isSupported(URL(string: "https://www.instagram.com/reel/xyz/")!))
+        XCTAssertFalse(SiteVideo.isSupported(URL(string: "https://notyoutube.com/x")!))
+        XCTAssertFalse(SiteVideo.isSupported(URL(string: "https://example.com/a.mp4")!))
+    }
+
+    func testProgressAndResult() {
+        XCTAssertEqual(SiteVideo.progress("NDMP 1024 2048 NA 512.5"), SiteVideo.Progress(downloaded: 1024, total: 2048, speed: 512.5))
+        XCTAssertEqual(SiteVideo.progress("NDMP 10 NA 900.0 NA")?.total, 900)
+        XCTAssertNil(SiteVideo.progress("[download] 5%"))
+        XCTAssertEqual(SiteVideo.savedFile("NDMF /Users/me/Downloads/Talk [abc].mp4"), "/Users/me/Downloads/Talk [abc].mp4")
+        XCTAssertEqual(SiteVideo.error("WARNING: x\nERROR: [youtube] abc: Video unavailable"), "Video unavailable")
+        XCTAssertTrue(SiteVideo.error("ERROR: This video is DRM protected").contains("copy-protected"))
+    }
+
+    func testArguments() {
+        let a = SiteVideo.arguments(url: URL(string: "https://youtu.be/abc")!, folder: "/out", temp: "/tmp/x", ffmpeg: "/app/ffmpeg",
+                                    quickJS: "/app/qjs", audioOnly: false, referrer: nil, cookies: "a=1", userAgent: nil,
+                                    username: nil, password: nil, speedLimitKBps: 500)
+        XCTAssertEqual(a.last, "https://youtu.be/abc")
+        XCTAssertTrue(a.contains("bv*+ba/b"))
+        XCTAssertTrue(a.contains("quickjs:/app/qjs"))
+        XCTAssertTrue(a.contains("/app"))
+        XCTAssertTrue(a.contains("500K"))
+        XCTAssertTrue(a.contains("Cookie:a=1"))
+        let audio = SiteVideo.arguments(url: URL(string: "https://youtu.be/abc")!, folder: "/o", temp: "/t", ffmpeg: nil, quickJS: nil,
+                                        audioOnly: true, referrer: nil, cookies: nil, userAgent: nil, username: nil, password: nil,
+                                        speedLimitKBps: 0)
+        XCTAssertTrue(audio.contains("ba[ext=m4a]/ba/b"))
+    }
+}

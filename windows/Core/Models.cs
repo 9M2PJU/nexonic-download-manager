@@ -45,8 +45,11 @@ public sealed class DownloadRecord
     public int? StreamDone { get; set; }
     public int? StreamTotal { get; set; }
     public long? StreamBytes { get; set; }
+    // Added in 0.4.0: videos from YouTube and other sites
+    public bool? SiteVideo { get; set; }
+    public bool? AudioOnly { get; set; }
 
-    public long Received { get { if (IsStream == true) return StreamBytes ?? 0; lock (Segments) return Segments.Sum(s => s.Written); } }
+    public long Received { get { if (IsStream == true || SiteVideo == true) return StreamBytes ?? 0; lock (Segments) return Segments.Sum(s => s.Written); } }
     public double Progress => IsStream == true
         ? (StreamTotal is > 0 ? Math.Min(1, (double)(StreamDone ?? 0) / StreamTotal.Value) : 0)
         : Size is > 0 ? Math.Min(1, (double)Received / Size.Value) : 0;

@@ -153,3 +153,40 @@ public class HLSTests
         Assert.True(HLS.IsPlaylistUrl("https://e.com/live/index.M3U8?token=1"));
     }
 }
+
+public class SiteVideoTests
+{
+    [Fact]
+    public void SupportedSites()
+    {
+        Assert.True(SiteVideo.IsSupported("https://www.youtube.com/watch?v=abc"));
+        Assert.True(SiteVideo.IsSupported("https://youtu.be/abc"));
+        Assert.True(SiteVideo.IsSupported("https://m.facebook.com/watch/?v=1"));
+        Assert.True(SiteVideo.IsSupported("https://www.instagram.com/reel/xyz/"));
+        Assert.False(SiteVideo.IsSupported("https://notyoutube.com/x"));
+        Assert.False(SiteVideo.IsSupported("https://example.com/a.mp4"));
+    }
+
+    [Fact]
+    public void ProgressAndResult()
+    {
+        Assert.Equal(new SiteVideo.Progress(1024, 2048, 512.5), SiteVideo.ParseProgress("NDMP 1024 2048 NA 512.5"));
+        Assert.Equal(900L, SiteVideo.ParseProgress("NDMP 10 NA 900.0 NA")!.Total);
+        Assert.Null(SiteVideo.ParseProgress("[download] 5%"));
+        Assert.Equal(@"C:\Users\me\Downloads\Talk [abc].mp4", SiteVideo.SavedFile(@"NDMF C:\Users\me\Downloads\Talk [abc].mp4"));
+        Assert.Equal("Video unavailable", SiteVideo.Error("WARNING: x\nERROR: [youtube] abc: Video unavailable"));
+        Assert.Contains("copy-protected", SiteVideo.Error("ERROR: This video is DRM protected"));
+    }
+
+    [Fact]
+    public void Arguments()
+    {
+        var a = SiteVideo.Arguments("https://youtu.be/abc", "/out", "/tmp/x", "/app/ffmpeg", "/app/qjs", false, null, "a=1", null, null, null, 500);
+        Assert.Equal("https://youtu.be/abc", a[^1]);
+        Assert.Contains("bv*+ba/b", a);
+        Assert.Contains("quickjs:/app/qjs", a);
+        Assert.Contains("500K", a);
+        Assert.Contains("Cookie:a=1", a);
+        Assert.Contains("ba[ext=m4a]/ba/b", SiteVideo.Arguments("https://youtu.be/abc", "/o", "/t", null, null, true, null, null, null, null, null, 0));
+    }
+}

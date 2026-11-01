@@ -158,7 +158,8 @@ public partial class MainWindow : Window
         {
             if (row.Speed.Length > 0) parts.Add(row.Speed);
             if (row.TimeLeft.Length > 0) parts.Add(row.TimeLeft + " left");
-            if (r.IsStream == true) parts.Add($"Video pieces: {r.StreamDone ?? 0} of {r.StreamTotal ?? 0}");
+            if (r.SiteVideo == true) parts.Add(r.AudioOnly == true ? "Video site · sound only" : "Video site · best quality");
+            else if (r.IsStream == true) parts.Add($"Video pieces: {r.StreamDone ?? 0} of {r.StreamTotal ?? 0}");
             else lock (r.Segments) parts.Add($"Connections: {r.Segments.Count(x => !x.IsComplete)}");
         }
         parts.Add(r.AcceptsRanges || r.Status == DownloadStatus.Queued ? "Resume: yes" : "Resume: no");

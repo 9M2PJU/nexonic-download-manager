@@ -54,6 +54,9 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
     public var streamDone: Int?
     public var streamTotal: Int?
     public var streamBytes: Int64?
+    // Added in 0.4.0: videos from YouTube and other sites
+    public var siteVideo: Bool?
+    public var audioOnly: Bool?
 
     public init(url: URL, folder: URL, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil,
                 userAgent: String? = nil) {
@@ -71,7 +74,7 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
         added = Date()
     }
 
-    public var received: Int64 { isStream == true ? (streamBytes ?? 0) : segments.reduce(0) { $0 + $1.written } }
+    public var received: Int64 { isStream == true || siteVideo == true ? (streamBytes ?? 0) : segments.reduce(0) { $0 + $1.written } }
     public var progress: Double {
         if isStream == true {
             guard let total = streamTotal, total > 0 else { return 0 }

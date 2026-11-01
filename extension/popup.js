@@ -1,4 +1,4 @@
-import { DEFAULTS, filterLinks, qualityLabel } from "./helpers.js";
+import { DEFAULTS, filterLinks, isVideoSite, qualityLabel } from "./helpers.js";
 
 const $ = (id) => document.getElementById(id);
 const ask = (msg) => chrome.runtime.sendMessage(msg);
@@ -37,6 +37,17 @@ function item(url, label, extra) {
   span.title = url;
   li.append(extra, span);
   return li;
+}
+
+// YouTube, Instagram, Facebook, X … : the app saves the page's video in the best quality
+if (tab && isVideoSite(tab.url)) {
+  $("siteBox").hidden = false;
+  const go = (audioOnly, b) => async () => {
+    const r = await ask({ type: "send-link", url: tab.url, referrer: tab.url, site: true, audioOnly });
+    b.textContent = r && r.ok ? "Sent" : "Failed";
+  };
+  $("siteVideo").onclick = go(false, $("siteVideo"));
+  $("siteAudio").onclick = go(true, $("siteAudio"));
 }
 
 // Media seen on this tab

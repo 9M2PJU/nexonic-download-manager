@@ -74,3 +74,12 @@ test("names, order and labels", () => {
   assert.deepEqual(sorted.map((m) => m.url), ["c", "b", "a"]);
   assert.equal(qualityLabel({ kind: "stream", height: 1080 }), "1080p · stream");
 });
+
+import { isVideoSite } from "./helpers.js";
+
+test("video sites", () => {
+  assert.equal(isVideoSite("https://www.youtube.com/watch?v=1"), true);
+  assert.equal(isVideoSite("https://m.facebook.com/reel/1"), true);
+  assert.equal(isVideoSite("https://notyoutube.com/"), false);
+  assert.equal(isVideoSite("not a link"), false);
+});

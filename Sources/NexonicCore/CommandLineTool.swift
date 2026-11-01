@@ -19,6 +19,7 @@ public enum CommandLineTool {
       --password <pass>     password for password-protected downloads
       --checksum <value>    expected MD5, SHA-1, SHA-256 or SHA-512 (checked when finished)
       --limit <KB/s>        speed limit for these downloads
+      --audio               video sites: save the sound only
     """
 
     public enum Outcome: Equatable {
@@ -50,6 +51,7 @@ public enum CommandLineTool {
             let a = args[i]
             if a.hasPrefix("--") {
                 if a == "--later" { template.start = false; i += 1; continue }
+                if a == "--audio" { template.audioOnly = true; i += 1; continue }
                 guard i + 1 < args.count else { return .failure("\(a) needs a value") }
                 let v = args[i + 1]
                 switch a {

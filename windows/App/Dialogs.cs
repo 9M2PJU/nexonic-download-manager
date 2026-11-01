@@ -129,6 +129,8 @@ public static class Dialogs
         var name = f.Text("File name (one link only; empty = from the link)");
         var folder = f.Folder(m.Settings.Folder);
         var queue = f.Queue(m, queueId);
+        var audio = f.Check("Sound only (for YouTube and other video sites)", false);
+        f.Note("Video sites are saved in the best quality available, with picture and sound joined.");
         var more = new Expander { Header = "Login, checksum and speed limit", Margin = new Thickness(0, 8, 0, 0) };
         var inner = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
         TextBox Inner(string label)
@@ -161,6 +163,7 @@ public static class Dialogs
                 Password = pass.Password,
                 Checksum = sum.Text.Trim(),
                 SpeedLimitKBps = Number(limit.Text),
+                AudioOnly = audio.IsChecked == true,
             });
             if (n == 0) { error.Text = "Paste at least one http or https link."; return; }
             f.Close();

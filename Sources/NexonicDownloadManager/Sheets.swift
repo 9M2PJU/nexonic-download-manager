@@ -46,6 +46,9 @@ struct AddSheet: View {
     @State private var checksum = ""
     @State private var limit = 0
     @State private var more = false
+    @State private var audioOnly = false
+
+    private var hasSiteVideo: Bool { lines.contains { URL(string: $0).map(SiteVideo.isSupported) ?? false } }
 
     private var lines: [String] {
         text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -62,6 +65,11 @@ struct AddSheet: View {
                     TextField("File name", text: $name, prompt: Text(lines.first.flatMap { URL(string: $0) }.map(FileNames.fromURL) ?? "From the link"))
                 }
                 SaveOptions(folder: $folder, queueID: $queueID)
+                if hasSiteVideo {
+                    Toggle("Sound only (video sites)", isOn: $audioOnly)
+                    Text("Video sites are saved in the best quality available, with picture and sound joined.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 DisclosureGroup("Login, checksum and speed limit", isExpanded: $more) {
                     TextField("User name", text: $username)
                     SecureField("Password", text: $password)
@@ -99,6 +107,7 @@ struct AddSheet: View {
         o.password = password
         o.checksum = Checksum.parse(checksum) == nil ? "" : checksum
         o.speedLimitKBps = max(0, limit)
+        o.audioOnly = audioOnly
         manager.add(links: text, options: o)
         close()
     }

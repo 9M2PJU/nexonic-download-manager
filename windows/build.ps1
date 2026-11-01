@@ -13,9 +13,15 @@ if ($LASTEXITCODE -ne 0) { throw "Helper build failed" }
 Get-ChildItem $out -Filter *.pdb | Remove-Item
 # Small bundled ffmpeg (re-packs streamed video into .mp4), cross-built on Linux by scripts/build-ffmpeg.sh windows.
 if (Test-Path .ffmpeg-cache\windows\ffmpeg.exe) {
-  Copy-Item .ffmpeg-cache\windows\ffmpeg.exe, .ffmpeg-cache\windows\FFMPEG-LICENSE.txt $out
+  Copy-Item .ffmpeg-cache\windows\ffmpeg.exe, .ffmpeg-cache\windows\ffprobe.exe, .ffmpeg-cache\windows\FFMPEG-LICENSE.txt $out
 } else {
   Write-Warning "No .ffmpeg-cache\windows\ffmpeg.exe: streamed video will be saved without joining picture and sound"
+}
+# Video engine for YouTube and other sites (scripts/fetch-video-tools.sh windows .tools-cache/windows).
+if (Test-Path .tools-cache\windows\yt-dlp.exe) {
+  Copy-Item .tools-cache\windows\yt-dlp.exe, .tools-cache\windows\qjs.exe, .tools-cache\windows\VIDEO-ENGINE-LICENSES.txt $out
+} else {
+  Write-Warning "No .tools-cache\windows\yt-dlp.exe: videos from YouTube and other sites will not work in this build"
 }
 python scripts\build-extensions.py
 if ($LASTEXITCODE -ne 0) { throw "Extension build failed" }

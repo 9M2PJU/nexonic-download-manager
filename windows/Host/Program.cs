@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Nexonic.Core;
 
 // Browser helper (native messaging) and the ndm command line: both hand downloads to the app through the inbox.
-const string Version = "0.3.0";
+const string Version = "0.4.0";
 
 if (CommandLineTool.IsCommand(args))
 {
@@ -44,7 +44,8 @@ while (NativeMessaging.Read(input) is { } msg)
                 msg["fileName"]?.GetValue<string>(),
                 msg["referrer"]?.GetValue<string>(),
                 msg["cookies"]?.GetValue<string>(),
-                msg["userAgent"]?.GetValue<string>()) { Start = msg["later"]?.GetValue<bool>() == true ? false : null, Stream = msg["stream"]?.GetValue<bool>() == true ? true : null };
+                msg["userAgent"]?.GetValue<string>()) { Start = msg["later"]?.GetValue<bool>() == true ? false : null, Stream = msg["stream"]?.GetValue<bool>() == true ? true : null,
+                  Site = msg["site"]?.GetValue<bool>() == true ? true : null, AudioOnly = msg["audioOnly"]?.GetValue<bool>() == true ? true : null };
             if (!job.IsValid)
             {
                 NativeMessaging.Write(output, new { ok = false, error = "Only http and https links can be downloaded" });

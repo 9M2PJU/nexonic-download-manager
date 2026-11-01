@@ -1,3 +1,12 @@
+## 0.4.0
+
+- **YouTube, Instagram, Facebook, X (Twitter), TikTok, Vimeo, Reddit and 1,000+ other sites:** save videos in the best
+  quality (up to 4K/8K) or sound only, from the video button, the extension popup, the right-click menu, Add URL or `ndm`.
+  Feeds work too: the button saves the post a video belongs to.
+- Built-in video engine (yt-dlp, kept up to date automatically, plus QuickJS), and the bundled ffmpeg now also joins
+  WebM/VP9/AV1 and Opus. Nothing else to install.
+- Copy-protected services stay unsupported.
+
 ## 0.3.0
 
 - **Streamed video (HLS):** the extension now finds streamed videos on any site that doesn't copy-protect them, lists

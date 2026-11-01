@@ -2,7 +2,7 @@ import Foundation
 import NexonicCore
 
 // Browser helper (native messaging) and the `ndm` command line: both hand downloads to the app through the inbox.
-let version = "0.3.0"
+let version = "0.4.0"
 
 func openApp(_ url: String) {
     let p = Process()
@@ -54,6 +54,8 @@ while let message = try? NativeMessaging.read(from: input) {
         )
         if let later = message["later"] as? Bool, later { job.start = false }
         if let stream = message["stream"] as? Bool, stream { job.stream = true }
+        if let site = message["site"] as? Bool, site { job.site = true }
+        if let audio = message["audioOnly"] as? Bool, audio { job.audioOnly = true }
         guard job.validURL != nil else {
             reply(["ok": false, "error": "Only http and https links can be downloaded"])
             continue

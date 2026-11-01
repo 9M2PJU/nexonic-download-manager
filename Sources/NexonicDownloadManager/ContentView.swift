@@ -347,7 +347,7 @@ struct DetailPane: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(item.fileName).font(.headline).lineLimit(1)
             Text(item.url.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled)
-            if item.isStream == true {
+            if item.isStream == true || item.siteVideo == true {
                 ProgressView(value: item.status == .finished ? 1 : item.progress).tint(brand)
             } else {
                 SegmentBar(segments: item.segments, size: item.size).frame(height: 14)
@@ -358,7 +358,9 @@ struct DetailPane: View {
                 if item.status.isActive {
                     Text(speed(bps))
                     if !eta.isEmpty { Text("\(eta) left") }
-                    if item.isStream == true {
+                    if item.siteVideo == true {
+                    Text(item.audioOnly == true ? "Video site · sound only" : "Video site · best quality")
+                } else if item.isStream == true {
                     Text("Video pieces: \(item.streamDone ?? 0) of \(item.streamTotal ?? 0)")
                 } else {
                     Text("Connections: \(item.segments.filter { !$0.isComplete }.count)")

@@ -59,9 +59,25 @@
     place();
   }
 
+  // YouTube, Instagram, Facebook, X, TikTok … : the app's video engine saves the post's video in the best quality.
+  const SITES = /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|instagram\.com|facebook\.com|fb\.watch|x\.com|twitter\.com|tiktok\.com|vimeo\.com|dailymotion\.com|reddit\.com|twitch\.tv|linkedin\.com|pinterest\.com|threads\.net|bilibili\.com|rumble\.com|streamable\.com)$/i;
+  const onVideoSite = SITES.test(location.hostname);
+  const POST = /\/(watch|shorts|reel|reels|p|tv|videos?|status|post|clip)\b|\/v\//i;
+
+  /** The link of the post a player belongs to (feeds show many videos on one page). */
+  function postLink(el) {
+    if (/\/(watch|shorts|reel|p|status|videos?)\b/i.test(location.pathname)) return location.href;
+    for (let n = el, i = 0; n && i < 25; n = n.parentElement, i++) {
+      const a = n.querySelector && [...n.querySelectorAll("a[href]")].find((x) => POST.test(new URL(x.href, location.href).pathname));
+      if (a) return new URL(a.href, location.href).href;
+    }
+    return location.href;
+  }
+
   function send(m) {
     const msg = { type: "send-link", url: m.url, referrer: location.href };
     if (m.kind === "stream") Object.assign(msg, { stream: true, fileName: m.name });
+    if (m.kind === "site") Object.assign(msg, { site: true, audioOnly: !!m.audioOnly });
     chrome.runtime.sendMessage(msg, (r) => {
       button.textContent = r && r.ok ? "Sent to Nexonic" : "Open Nexonic first";
       setTimeout(hide, 1500);
@@ -71,6 +87,18 @@
   button.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (onVideoSite && target) {
+      list.textContent = "";
+      const link = postLink(target);
+      for (const [label, audioOnly] of [["Video, best quality", false], ["Sound only", true]]) {
+        const li = document.createElement("li");
+        li.textContent = label;
+        li.onclick = () => send({ url: link, kind: "site", audioOnly });
+        list.appendChild(li);
+      }
+      list.hidden = false;
+      return;
+    }
     const src = target && (target.currentSrc || target.src);
     chrome.runtime.sendMessage({ type: "video-button", src }, (r) => {
       const media = (r && r.media) || [];

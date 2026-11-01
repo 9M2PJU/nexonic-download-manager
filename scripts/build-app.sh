@@ -18,8 +18,12 @@ cp "$BIN/NexonicDownloadManager" "$APP/Contents/MacOS/"
 cp "$BIN/nexonic-host" "$APP/Contents/MacOS/"
 # Small bundled ffmpeg (re-packs streamed video into .mp4); built once and kept in .ffmpeg-cache/.
 if [ ! -x .ffmpeg-cache/mac/ffmpeg ]; then bash scripts/build-ffmpeg.sh mac .ffmpeg-cache/mac; fi
-cp .ffmpeg-cache/mac/ffmpeg "$APP/Contents/MacOS/ffmpeg"
+cp .ffmpeg-cache/mac/ffmpeg .ffmpeg-cache/mac/ffprobe "$APP/Contents/MacOS/"
 cp .ffmpeg-cache/mac/FFMPEG-LICENSE.txt "$APP/Contents/Resources/"
+# Video engine for YouTube and other sites (yt-dlp + QuickJS); fetched fresh unless .tools-cache/mac already has it.
+if [ ! -x .tools-cache/mac/yt-dlp ]; then bash scripts/fetch-video-tools.sh mac .tools-cache/mac; fi
+cp .tools-cache/mac/yt-dlp .tools-cache/mac/qjs "$APP/Contents/MacOS/"
+cp .tools-cache/mac/VIDEO-ENGINE-LICENSES.txt "$APP/Contents/Resources/"
 sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
 cp -R build/extension-chrome "$APP/Contents/Resources/Extension"
 cp "build/NexonicFirefoxAddon-$VERSION.xpi" "$APP/Contents/Resources/Firefox Add-on.xpi"
@@ -34,7 +38,9 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
   codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP/Contents/MacOS/nexonic-host"
-  codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP/Contents/MacOS/ffmpeg"
+  for tool in ffmpeg ffprobe qjs yt-dlp; do
+    codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP/Contents/MacOS/$tool"
+  done
   codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP"
 else
   codesign --force --deep -s - "$APP"

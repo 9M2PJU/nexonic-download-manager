@@ -55,6 +55,7 @@ final class DownloadManager: ObservableObject {
         }
         collectInbox()
         schedule()
+        DispatchQueue.global(qos: .utility).async { SiteVideoTools.prepare() }  // keeps the video engine current
     }
 
     /// Sample list for the README screenshots (only used when the app is started with NDM_DEMO=1).
@@ -75,6 +76,7 @@ final class DownloadManager: ObservableObject {
         var password = ""
         var checksum = ""
         var speedLimitKBps = 0
+        var audioOnly = false
     }
 
     func add(links text: String, options: AddOptions = AddOptions()) {
@@ -88,9 +90,11 @@ final class DownloadManager: ObservableObject {
 
     func add(_ job: DownloadJob, options o: AddOptions = AddOptions()) {
         guard let url = job.validURL else { return }
-        let stream = job.stream == true || HLS.isPlaylistURL(url)
+        let site = job.site == true || (SiteVideo.isSupported(url) && job.stream != true)
+        let stream = !site && (job.stream == true || HLS.isPlaylistURL(url))
         var name = job.fileName.map(FileNames.sanitize) ?? FileNames.fromURL(url)
         if stream { name = (name as NSString).deletingPathExtension + ".mp4" }
+        if site && job.fileName == nil { name = "Video from \(url.host ?? "site")" }
         // A link the user asked to refresh: keep what is downloaded and continue from the new address.
         if let i = items.firstIndex(where: { $0.awaitingRefresh == true && $0.fileName == name }) {
             items[i].url = url
@@ -107,6 +111,10 @@ final class DownloadManager: ObservableObject {
         var record = DownloadRecord(url: url, folder: folder, fileName: name, referrer: job.referrer,
                                     cookies: job.cookies, userAgent: job.userAgent)
         if stream { record.isStream = true }
+        if site {
+            record.siteVideo = true
+            record.audioOnly = (job.audioOnly ?? o.audioOnly) ? true : nil
+        }
         record.queueID = job.queue.map(queueID(named:)) ?? o.queueID
         record.username = job.username ?? (o.username.isEmpty ? nil : o.username)
         record.password = job.password ?? (o.password.isEmpty ? nil : o.password)
@@ -309,7 +317,9 @@ final class DownloadManager: ObservableObject {
             var slots = max(1, limit) - items.filter { $0.queue == q.id && $0.status.isActive }.count
             for item in items where item.queue == q.id && item.status == .queued && slots > 0 && transfers[item.id] == nil {
                 slots -= 1
-                let t: Downloader = item.isStream == true
+                let t: Downloader = item.siteVideo == true
+                    ? SiteVideoTransfer(record: item, sortIntoCategories: settings.sortIntoCategoryFolders, speedLimitKBps: settings.speedLimitKBps)
+                    : item.isStream == true
                     ? StreamTransfer(record: item, connections: settings.connections, limiter: limiter,
                                      sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
                     : Transfer(record: item, connections: settings.connections, limiter: limiter,

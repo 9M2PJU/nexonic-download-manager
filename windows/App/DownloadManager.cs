@@ -18,6 +18,7 @@ public sealed class AddOptions
     public string Password { get; set; } = "";
     public string Checksum { get; set; } = "";
     public int SpeedLimitKBps { get; set; }
+    public bool AudioOnly { get; set; }
 }
 
 /// <summary>Queues, scheduler, persistence and after-download actions (UI thread only).</summary>
@@ -56,6 +57,7 @@ public sealed class DownloadManager
         timer.Start();
         CollectInbox();
         Schedule();
+        Task.Run(SiteVideoTools.Prepare); // keeps the video engine current
     }
 
     public void ApplySettings(AppSettings s)
@@ -94,9 +96,11 @@ public sealed class DownloadManager
     {
         if (!job.IsValid) return;
         o ??= new AddOptions();
-        var stream = job.Stream == true || HLS.IsPlaylistUrl(job.Url);
+        var site = job.Site == true || (Nexonic.Core.SiteVideo.IsSupported(job.Url) && job.Stream != true);
+        var stream = !site && (job.Stream == true || HLS.IsPlaylistUrl(job.Url));
         var name = job.FileName is { Length: > 0 } n ? FileNames.Sanitize(n) : FileNames.FromUrl(job.Url);
         if (stream) name = Path.GetFileNameWithoutExtension(name) + ".mp4";
+        if (site && string.IsNullOrEmpty(job.FileName)) name = $"Video from {new Uri(job.Url).Host}";
         // A link the user asked to refresh: keep what is downloaded and continue from the new address.
         if (Rows.FirstOrDefault(r => r.Record.AwaitingRefresh == true && r.Record.FileName == name) is { } waiting)
         {
@@ -125,6 +129,8 @@ public sealed class DownloadManager
             SpeedLimitKBps = limit > 0 ? limit : null,
             Status = job.Start ?? o.Start ? DownloadStatus.Queued : DownloadStatus.Paused,
             IsStream = stream ? true : null,
+            SiteVideo = site ? true : null,
+            AudioOnly = site && (job.AudioOnly ?? o.AudioOnly) ? true : null,
         };
         Rows.Insert(0, new Row(rec, QueueName));
         Schedule();
@@ -346,7 +352,9 @@ public sealed class DownloadManager
             foreach (var row in Rows.Reverse().Where(r => r.Record.Queue == q.Id && r.Record.Status == DownloadStatus.Queued).ToList())
             {
                 if (slots-- <= 0) break;
-                IDownloader t = row.Record.IsStream == true
+                IDownloader t = row.Record.SiteVideo == true
+                    ? new SiteVideoTransfer(row.Record, Settings.SortIntoCategoryFolders, Settings.SpeedLimitKBps)
+                    : row.Record.IsStream == true
                     ? new StreamTransfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy)
                     : new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy);
                 transfers[row.Record.Id] = t;

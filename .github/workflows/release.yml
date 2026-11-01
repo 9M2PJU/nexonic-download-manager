@@ -43,6 +43,12 @@ jobs:
         with:
           name: ffmpeg-windows
           path: .ffmpeg-cache/windows
+      - name: Video engine for Windows
+        run: bash scripts/fetch-video-tools.sh windows .tools-cache/windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tools-windows
+          path: .tools-cache/windows
   windows:
     needs: [release, ffmpeg-windows]
     runs-on: windows-latest
@@ -53,6 +59,10 @@ jobs:
         with:
           name: ffmpeg-windows
           path: .ffmpeg-cache/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: tools-windows
+          path: .tools-cache/windows
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"

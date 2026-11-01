@@ -1,5 +1,5 @@
 import {
-  DEFAULTS, HOST, addMedia, cookieHeader, header, isMedia, isStreamPlaylist, nameFromUrl, shouldTakeOver, sortMedia,
+  DEFAULTS, HOST, addMedia, cookieHeader, header, isMedia, isStreamPlaylist, isVideoSite, nameFromUrl, shouldTakeOver, sortMedia,
   summarizePlaylist, titleToName,
 } from "./helpers.js";
 
@@ -50,6 +50,7 @@ chrome.downloads.onCreated.addListener(async (item) => {
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: "nexonic-download", title: "Download with Nexonic", contexts: ["link", "video", "audio"] });
+  chrome.contextMenus.create({ id: "nexonic-page-video", title: "Download this page's video with Nexonic", contexts: ["page", "video"] });
   chrome.contextMenus.create({ id: "nexonic-all", title: "Download all links with Nexonic", contexts: ["page", "selection"] });
 });
 
@@ -58,6 +59,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "nexonic-all" && tab) {
     const links = await pageLinks(tab.id, !!info.selectionText);
     for (const url of links) await send(url, { referrer });
+    return;
+  }
+  if (info.menuItemId === "nexonic-page-video") {
+    send(info.pageUrl || (tab && tab.url), { site: true });
     return;
   }
   const url = info.linkUrl || info.srcUrl;
@@ -137,6 +142,8 @@ async function addStream(tabId, url) {
 chrome.webRequest.onResponseStarted.addListener(
   async (d) => {
     if (d.tabId < 0 || d.statusCode >= 400) return;
+    // On video sites the app's video engine saves the whole video, so the small pieces the player loads are skipped.
+    if (isVideoSite(d.initiator || d.documentUrl || d.originUrl || "")) return;
     const type = header(d.responseHeaders, "content-type");
     if (isStreamPlaylist(d.url, type)) return addStream(d.tabId, d.url);
     const range = header(d.responseHeaders, "content-range");
@@ -170,6 +177,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       case "send-link": {
         const extra = { referrer, later: !!msg.later };
         if (msg.stream) Object.assign(extra, { stream: true, fileName: msg.fileName });
+        else if (msg.site) Object.assign(extra, { site: true, audioOnly: !!msg.audioOnly });
         else if (msg.fileName) extra.fileName = msg.fileName;
         return { ok: await send(msg.url, extra) };
       }

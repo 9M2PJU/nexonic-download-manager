@@ -6,6 +6,9 @@
 
 A free, open-source alternative to Internet Download Manager (IDM), for Mac as well as Windows.
 
+**Download videos from YouTube, Instagram, Facebook, X (Twitter), TikTok, Vimeo, Reddit and 1,000+ other sites in the
+best quality (up to 4K and 8K), or just the sound.**
+
 Splits every download into up to 32 connections · pauses and resumes, even after a restart · queues and a scheduler ·
 catches downloads and videos from your browser
 
@@ -30,18 +33,21 @@ catches downloads and videos from your browser
 
 ### Video and audio, in the best quality
 
-Point at a video player on a web page and click **Download this video**, or open the extension popup to see every
-video the page has loaded, best quality first. It saves:
+**YouTube, Instagram, Facebook, X (Twitter), TikTok, Vimeo, Reddit, Twitch, Dailymotion, SoundCloud and 1,000+
+more sites:** point at a video and click **Download this video** (choose **Video, best quality** or **Sound only**),
+use the extension popup's **This page's video**, right-click → **Download this page's video with Nexonic**, or paste the
+link into **Add URL**. The app picks the highest resolution and frame rate available (up to 4K/8K), joins picture and
+sound, and saves an `.mp4` (or `.mkv` when the best version can only be stored that way). Feeds work too: the button
+saves the post the video belongs to.
 
-- **Ordinary video and audio files** (MP4, WebM, MP3 …) at full size.
-- **Streamed video (HLS)**, the way most news, course, conference, event and many social sites deliver video: the app
-  picks the **highest resolution and bit rate** on offer, downloads the pieces in parallel, resumes after a pause or
-  restart, and joins picture and sound into one `.mp4` named after the page. Everything it needs is built in: nothing
-  else to install.
+**Any other website:** the extension finds ordinary video and audio files and streamed video (HLS) on the page, lists
+them best quality first, and the app saves streams as one `.mp4` named after the page.
 
-It does **not** save copy-protected video (Netflix-style DRM, or sites that encrypt their streams on purpose) and it
-does not get around any site's protection; the extension shows "copy-protected" for those. Some large platforms also
-deliver video in a way that can't be saved this way. Only download what you have the right to save.
+Everything needed is built in: the app ships with yt-dlp (kept up to date automatically, because sites change often),
+a small ffmpeg and QuickJS. Nothing else to install.
+
+Copy-protected services (Netflix, Disney+, Prime Video, Spotify and similar DRM) are not supported. Only download
+videos you have the right to save, and follow each site's terms of use.
 
 <sub>Nexonic Download Manager is an independent project and is not affiliated with Internet Download Manager or its
 makers.</sub>
@@ -110,7 +116,8 @@ Firefox window. For a quick test without signing: `about:debugging` → **This F
 |---|---|
 | Download a link | **Add URL** (or Ctrl/⌘+N), paste one or more links, **Start Download**. |
 | Download from a website | Just click the download link in the browser; the app takes it over. |
-| Save a video or song from a page | Play it for a few seconds, point at the player and click **Download this video** (or extension popup → **Media on this page**). Streams are saved in the best quality as one `.mp4`. |
+| Save a YouTube, Instagram, Facebook, X or TikTok video | Point at the video → **Download this video** → **Video, best quality** or **Sound only**. Or paste the link into **Add URL** (`ndm <link> --audio` for sound only). |
+| Save a video or song from another page | Play it for a few seconds, point at the player and click **Download this video** (or extension popup → **Media on this page**). Streams are saved in the best quality as one `.mp4`. |
 | Get many files from one page | Extension popup → **Links on this page** → type the file types → tick → **Download**. |
 | Download a numbered series | **Batch** → `https://example.com/img[001-100].jpg`. |
 | Download a whole folder of a site | **Grabber** → start page, depth, file types → **Explore** → **Download Checked**. |
@@ -138,8 +145,9 @@ state, file type and queue, and the status bar shows how many are running and th
 - **Streamed video (HLS):** best quality picked automatically, pieces downloaded in parallel, picture and sound joined
   into one `.mp4`, resumable. Paste a `.m3u8` link into **Add URL** or use the browser button.
 - **Categories:** Compressed, Documents, Music, Video, Programs, Images; optionally saved into category folders.
-- **All included:** one download, nothing else to install. The app carries a small built-in copy of ffmpeg (LGPL,
-  only used to put streamed video into `.mp4`; see `FFMPEG-LICENSE.txt` in the app).
+- **Video sites:** YouTube, Instagram, Facebook, X, TikTok and 1,000+ more, in the best quality or sound only.
+- **All included:** one download, nothing else to install. The app carries yt-dlp (Unlicense), QuickJS (MIT) and a
+  small ffmpeg (LGPL, re-packing only); see `VIDEO-ENGINE-LICENSES.txt` and `FFMPEG-LICENSE.txt` in the app.
 - **Private:** no account, no tracking, nothing sent anywhere except the downloads you start.
 
 ## Command line
@@ -157,6 +165,8 @@ ndm help
 
 ## Troubleshooting
 
+- **A YouTube or Instagram video fails with "sign in":** open it in your browser while signed in and send it from
+  the extension (the sign-in is passed along), or try again later; sites sometimes limit downloads.
 - **"Download this video" finds nothing:** play the video for a few seconds first, then click again. If it says
   copy-protected, the site doesn't allow saving that video.
 

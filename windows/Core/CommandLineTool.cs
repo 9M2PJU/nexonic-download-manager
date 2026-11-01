@@ -20,6 +20,7 @@ public static class CommandLineTool
       --password <pass>     password for password-protected downloads
       --checksum <value>    expected MD5, SHA-1, SHA-256 or SHA-512 (checked when finished)
       --limit <KB/s>        speed limit for these downloads
+      --audio               video sites: save the sound only
     """;
 
     public sealed record Outcome(bool Help, List<DownloadJob> Jobs, string? Error);
@@ -55,6 +56,7 @@ public static class CommandLineTool
             if (a.StartsWith("--"))
             {
                 if (a == "--later") { t = t with { Start = false }; i++; continue; }
+                if (a == "--audio") { t = t with { AudioOnly = true }; i++; continue; }
                 if (i + 1 >= args.Count) return Fail($"{a} needs a value");
                 var v = args[i + 1];
                 switch (a)

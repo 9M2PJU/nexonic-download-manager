@@ -152,3 +152,19 @@ export function qualityLabel(item) {
   const parts = [item.height ? `${item.height}p` : "", item.live ? "live" : "", "stream"].filter(Boolean);
   return parts.join(" · ");
 }
+
+/** Sites whose videos the app saves with its video engine (best quality, picture and sound joined). */
+export const VIDEO_SITES = [
+  "youtube.com", "youtu.be", "youtube-nocookie.com", "instagram.com", "facebook.com", "fb.watch", "x.com", "twitter.com",
+  "tiktok.com", "vimeo.com", "dailymotion.com", "reddit.com", "redd.it", "twitch.tv", "soundcloud.com", "linkedin.com",
+  "pinterest.com", "threads.net", "bilibili.com", "rumble.com", "streamable.com", "bandcamp.com", "mixcloud.com",
+];
+
+export function isVideoSite(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return VIDEO_SITES.some((h) => host === h || host.endsWith(`.${h}`));
+  } catch (_) {
+    return false;
+  }
+}

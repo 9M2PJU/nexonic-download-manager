@@ -29,6 +29,20 @@ jobs:
           "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host" help | grep -q "ndm batch"
           "build/Nexonic Download Manager.app/Contents/MacOS/ffmpeg" -hide_banner -muxers | grep -q " mp4 "
           lipo -archs "build/Nexonic Download Manager.app/Contents/MacOS/ffmpeg"
+          "build/Nexonic Download Manager.app/Contents/MacOS/yt-dlp" --version
+          "build/Nexonic Download Manager.app/Contents/MacOS/qjs" -e 'console.log("qjs ok")'
+      - name: Video engine joins picture and sound (local test video)
+        run: |
+          brew list ffmpeg >/dev/null 2>&1 || brew install -q ffmpeg
+          mkdir -p /tmp/site && cd /tmp/site
+          ffmpeg -loglevel error -f lavfi -i testsrc=size=640x360:rate=25 -f lavfi -i sine=frequency=440 -t 4 -map 0:v -map 1:a \
+            -c:v libx264 -c:a aac -f dash -adaptation_sets "id=0,streams=v id=1,streams=a" dash.mpd
+          python3 -m http.server 8777 >/dev/null 2>&1 &
+          sleep 1
+          M="$GITHUB_WORKSPACE/build/Nexonic Download Manager.app/Contents/MacOS"
+          "$M/yt-dlp" --ignore-config --ffmpeg-location "$M" -f "bv*+ba/b" --merge-output-format "mp4/mkv" -P /tmp/out \
+            -o "test.%(ext)s" http://127.0.0.1:8777/dash.mpd
+          "$M/ffprobe" -v error -show_entries stream=codec_type -of csv /tmp/out/test.mp4 | sort | tr '\n' ' ' | grep -q "stream,audio stream,video"
           plutil -lint "build/Nexonic Download Manager.app/Contents/Info.plist"
           python3 scripts/host-ping.py "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host"
       - uses: actions/upload-artifact@v4
@@ -51,6 +65,12 @@ jobs:
         with:
           name: ffmpeg-windows
           path: .ffmpeg-cache/windows
+      - name: Video engine for Windows
+        run: bash scripts/fetch-video-tools.sh windows .tools-cache/windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tools-windows
+          path: .tools-cache/windows
   windows:
     needs: ffmpeg-windows
     runs-on: windows-latest
@@ -61,6 +81,10 @@ jobs:
         with:
           name: ffmpeg-windows
           path: .ffmpeg-cache/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: tools-windows
+          path: .tools-cache/windows
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -75,6 +99,8 @@ jobs:
           if (-not (Test-Path build\win\ffmpeg.exe)) { throw "ffmpeg.exe missing from the app folder" }
           $m = & build\win\ffmpeg.exe -hide_banner -muxers 2>&1 | Out-String
           if ($m -notmatch " mp4 ") { throw "ffmpeg has no mp4 muxer: $m" }
+          & build\win\yt-dlp.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe does not run" }
       - name: Helper answers a ping
         shell: pwsh
         run: |
