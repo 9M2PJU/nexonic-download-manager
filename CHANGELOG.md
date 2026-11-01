@@ -1,3 +1,8 @@
+## 0.5.9
+
+- **Firefox add-on signed by Mozilla:** the `.xpi` in each release now installs in regular Firefox by dragging it onto
+  the window (no more "could not be installed because it has not been verified").
+
 ## 0.5.8
 
 - **Browser extension uses much less processing power:** it no longer inspects every request of every page, only the
