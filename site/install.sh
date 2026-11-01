@@ -30,8 +30,12 @@ echo "Downloading the latest version…"
 curl -fL --progress-bar -o "$work/app.dmg" "$DMG_URL"
 
 mkdir -p "$mnt"
-# The disk image shows the Terms of Use; agreeing to them was confirmed above.
-yes | hdiutil attach "$work/app.dmg" -nobrowse -noautoopen -quiet -mountpoint "$mnt" >/dev/null
+# The disk image shows the Terms of Use; agreeing to them was confirmed above. (Fed from `yes` without a pipe:
+# with pipefail, `yes` ending on SIGPIPE would otherwise stop the script here.)
+if ! hdiutil attach "$work/app.dmg" -nobrowse -noautoopen -quiet -mountpoint "$mnt" < <(yes) >/dev/null 2>&1; then
+  echo "Could not open the downloaded disk image. Please try again." >&2
+  exit 1
+fi
 
 if [ ! -d "$mnt/$APP_NAME.app" ]; then
   echo "The download did not contain the app. Please try again later." >&2
