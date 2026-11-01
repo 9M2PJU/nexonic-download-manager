@@ -31,7 +31,7 @@ public sealed class DownloadManager
     public event Action<string>? ClipboardLink;
     public event Action? QuitRequested;
 
-    readonly Dictionary<Guid, Transfer> transfers = new();
+    readonly Dictionary<Guid, IDownloader> transfers = new();
     readonly HashSet<string> queuesWithWork = new();
     readonly SpeedLimiter limiter = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(500) };
@@ -85,7 +85,9 @@ public sealed class DownloadManager
     {
         if (!job.IsValid) return;
         o ??= new AddOptions();
+        var stream = job.Stream == true || HLS.IsPlaylistUrl(job.Url);
         var name = job.FileName is { Length: > 0 } n ? FileNames.Sanitize(n) : FileNames.FromUrl(job.Url);
+        if (stream) name = Path.GetFileNameWithoutExtension(name) + ".mp4";
         // A link the user asked to refresh: keep what is downloaded and continue from the new address.
         if (Rows.FirstOrDefault(r => r.Record.AwaitingRefresh == true && r.Record.FileName == name) is { } waiting)
         {
@@ -113,6 +115,7 @@ public sealed class DownloadManager
             Checksum = job.Checksum ?? NullIfEmpty(o.Checksum),
             SpeedLimitKBps = limit > 0 ? limit : null,
             Status = job.Start ?? o.Start ? DownloadStatus.Queued : DownloadStatus.Paused,
+            IsStream = stream ? true : null,
         };
         Rows.Insert(0, new Row(rec, QueueName));
         Schedule();
@@ -334,7 +337,9 @@ public sealed class DownloadManager
             foreach (var row in Rows.Reverse().Where(r => r.Record.Queue == q.Id && r.Record.Status == DownloadStatus.Queued).ToList())
             {
                 if (slots-- <= 0) break;
-                var t = new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy);
+                IDownloader t = row.Record.IsStream == true
+                    ? new StreamTransfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy)
+                    : new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy);
                 transfers[row.Record.Id] = t;
                 row.Record.Status = DownloadStatus.Probing;
                 t.Changed += rec => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Changed(row, rec, t));
@@ -343,7 +348,7 @@ public sealed class DownloadManager
         }
     }
 
-    void Changed(Row row, DownloadRecord rec, Transfer t)
+    void Changed(Row row, DownloadRecord rec, IDownloader t)
     {
         row.Refresh();
         if (rec.Status is not (DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused)) return;

@@ -97,3 +97,58 @@ export function addMedia(list, item) {
   const rest = (list || []).filter((m) => m.url !== item.url);
   return [item, ...rest].slice(0, 30);
 }
+
+/** Is this response a streamed-video playlist (HLS)? */
+export function isStreamPlaylist(url, contentType) {
+  if (!/^https?:\/\//i.test(url || "")) return false;
+  return extensionOf(url) === "m3u8" || /mpegurl/i.test(String(contentType || ""));
+}
+
+/** Reads a playlist's text: best quality on offer, the variant links it points to, and whether it is protected or live. */
+export function summarizePlaylist(text, base) {
+  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const out = { valid: lines[0] === "#EXTM3U", master: false, height: 0, bandwidth: 0, variants: [], protected: false, live: false };
+  if (!out.valid) return out;
+  let pending = null;
+  for (const line of lines) {
+    if (line.startsWith("#EXT-X-STREAM-INF")) {
+      out.master = true;
+      const res = /RESOLUTION=\d+x(\d+)/i.exec(line);
+      const bw = /BANDWIDTH=(\d+)/i.exec(line);
+      pending = { height: res ? Number(res[1]) : 0, bandwidth: bw ? Number(bw[1]) : 0 };
+    } else if (/^#EXT-X-(SESSION-)?KEY/i.test(line)) {
+      const m = /METHOD=([A-Z0-9-]+)/i.exec(line);
+      if (m && m[1].toUpperCase() !== "NONE") out.protected = true;
+    } else if (!line.startsWith("#") && pending) {
+      try {
+        out.variants.push(new URL(line, base).href);
+      } catch (_) {
+        /* not a link */
+      }
+      if (pending.height > out.height || (pending.height === out.height && pending.bandwidth > out.bandwidth)) {
+        out.height = pending.height;
+        out.bandwidth = pending.bandwidth;
+      }
+      pending = null;
+    }
+  }
+  if (!out.master) out.live = !lines.includes("#EXT-X-ENDLIST");
+  return out;
+}
+
+/** A file name from a page title: "My Talk | Site" becomes "My Talk". */
+export function titleToName(title, fallback = "video") {
+  const t = String(title || "").split(/\s[|–—-]\s/)[0].replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+  return (t || fallback).slice(0, 120);
+}
+
+/** Best first: streams by picture height, then files by size. */
+export function sortMedia(list) {
+  return [...(list || [])].sort((a, b) => (b.height || 0) - (a.height || 0) || (b.size || 0) - (a.size || 0));
+}
+
+export function qualityLabel(item) {
+  if (item.kind !== "stream") return formatSize(item.size);
+  const parts = [item.height ? `${item.height}p` : "", item.live ? "live" : "", "stream"].filter(Boolean);
+  return parts.join(" · ");
+}

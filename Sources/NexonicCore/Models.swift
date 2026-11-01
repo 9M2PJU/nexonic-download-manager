@@ -49,6 +49,11 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
     public var checksumResult: String?
     public var speedLimitKBps: Int?
     public var awaitingRefresh: Bool?
+    // Added in 0.3.0: streamed video
+    public var isStream: Bool?
+    public var streamDone: Int?
+    public var streamTotal: Int?
+    public var streamBytes: Int64?
 
     public init(url: URL, folder: URL, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil,
                 userAgent: String? = nil) {
@@ -66,8 +71,12 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
         added = Date()
     }
 
-    public var received: Int64 { segments.reduce(0) { $0 + $1.written } }
+    public var received: Int64 { isStream == true ? (streamBytes ?? 0) : segments.reduce(0) { $0 + $1.written } }
     public var progress: Double {
+        if isStream == true {
+            guard let total = streamTotal, total > 0 else { return 0 }
+            return min(1, Double(streamDone ?? 0) / Double(total))
+        }
         guard let size, size > 0 else { return 0 }
         return min(1, Double(received) / Double(size))
     }

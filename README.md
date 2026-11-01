@@ -17,12 +17,19 @@ catches downloads and videos from your browser
 
 </div>
 
-### Video and audio
+### Video and audio, in the best quality
 
-Point at a video or audio player on a web page and click **Download this video**, or open the extension popup to see
-every video and audio file the page has loaded. This works on sites that play ordinary video files (news sites, course
-platforms, blogs, file hosts, your own media). Large video and social platforms usually stream video in many small
-encrypted or split pieces, which the app can't save as one file. Only download what you have the right to save.
+Point at a video player on a web page and click **Download this video**, or open the extension popup to see every
+video the page has loaded, best quality first. It saves:
+
+- **Ordinary video and audio files** (MP4, WebM, MP3 …) at full size.
+- **Streamed video (HLS)**, the way most news, course, conference, event and many social sites deliver video: the app
+  picks the **highest resolution and bit rate** on offer, downloads the pieces in parallel, resumes after a pause or
+  restart, and joins picture and sound into one `.mp4` named after the page.
+
+It does **not** save copy-protected video (Netflix-style DRM, or sites that encrypt their streams on purpose) and it
+does not get around any site's protection; the extension shows "copy-protected" for those. Some large platforms also
+deliver video in a way that can't be saved this way. Only download what you have the right to save.
 
 <sub>Nexonic Download Manager is an independent project and is not affiliated with Internet Download Manager or its
 makers.</sub>
@@ -91,7 +98,7 @@ Firefox window. For a quick test without signing: `about:debugging` → **This F
 |---|---|
 | Download a link | **Add URL** (or Ctrl/⌘+N), paste one or more links, **Start Download**. |
 | Download from a website | Just click the download link in the browser; the app takes it over. |
-| Save a video or song from a page | Point at the player and click **Download this video**, or open the extension popup → **Media on this page**. |
+| Save a video or song from a page | Play it for a few seconds, point at the player and click **Download this video** (or extension popup → **Media on this page**). Streams are saved in the best quality as one `.mp4`. |
 | Get many files from one page | Extension popup → **Links on this page** → type the file types → tick → **Download**. |
 | Download a numbered series | **Batch** → `https://example.com/img[001-100].jpg`. |
 | Download a whole folder of a site | **Grabber** → start page, depth, file types → **Explore** → **Download Checked**. |
@@ -116,6 +123,8 @@ state, file type and queue, and the status bar shows how many are running and th
 - **Proxy and passwords:** system, HTTP or SOCKS5 proxy (with optional login); per-download user name and password.
 - **After a download:** Download Complete window (Open, Open Folder), sound, notification, checksum (MD5, SHA-1,
   SHA-256, SHA-512), optional virus scan, and the file is marked as downloaded so the system checks it when opened.
+- **Streamed video (HLS):** best quality picked automatically, pieces downloaded in parallel, picture and sound joined
+  into one `.mp4`, resumable. Paste a `.m3u8` link into **Add URL** or use the browser button.
 - **Categories:** Compressed, Documents, Music, Video, Programs, Images; optionally saved into category folders.
 - **Private:** no account, no tracking, nothing sent anywhere except the downloads you start.
 
@@ -133,6 +142,12 @@ ndm help
 ```
 
 ## Troubleshooting
+
+- **A streamed video was saved as `.ts`, or picture and sound as two files:** install the free ffmpeg tool once and
+  the app joins them into one `.mp4` automatically (Mac: `brew install ffmpeg`; Windows: `winget install ffmpeg`).
+  `.ts` files already play in VLC and most players.
+- **"Download this video" finds nothing:** play the video for a few seconds first, then click again. If it says
+  copy-protected, the site doesn't allow saving that video.
 
 - **The extension popup says the app is not reachable:** open the app once, then restart the browser.
 - **A download fails with "link has expired":** use **Refresh Link…** (right-click the download).

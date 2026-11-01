@@ -109,3 +109,53 @@ final class CommandLineTests: XCTestCase {
         XCTAssertEqual(CommandLineTool.words(""), [])
     }
 }
+
+final class HLSTests: XCTestCase {
+    func testMasterPicksBestQualityAndSound() throws {
+        let text = """
+        #EXTM3U
+        #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",DEFAULT=YES,URI="audio/en.m3u8"
+        #EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360,CODECS="avc1.4d401e,mp4a.40.2",AUDIO="aud"
+        low/index.m3u8
+        #EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080,AUDIO="aud"
+        hd/index.m3u8
+        #EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720,AUDIO="aud"
+        mid/index.m3u8
+        """
+        guard case .master(let variants, let audio) = try HLS.parse(text, base: URL(string: "https://e.com/v/master.m3u8")!) else {
+            return XCTFail("expected a master playlist")
+        }
+        XCTAssertEqual(variants.count, 3)
+        XCTAssertEqual(variants[0].audioGroup, "aud")
+        XCTAssertEqual(HLS.best(variants)?.url.absoluteString, "https://e.com/v/hd/index.m3u8")
+        XCTAssertEqual(audio["aud"]?.absoluteString, "https://e.com/v/audio/en.m3u8")
+    }
+
+    func testMediaPlaylist() throws {
+        let text = """
+        #EXTM3U
+        #EXT-X-TARGETDURATION:6
+        #EXT-X-MAP:URI="init.mp4"
+        #EXTINF:6.0,
+        seg1.m4s
+        #EXTINF:6.0,
+        https://cdn.e.com/seg2.m4s
+        #EXT-X-ENDLIST
+        """
+        guard case .media(let m) = try HLS.parse(text, base: URL(string: "https://e.com/v/hd/index.m3u8")!) else {
+            return XCTFail("expected a media playlist")
+        }
+        XCTAssertEqual(m.segments.map(\.absoluteString), ["https://e.com/v/hd/seg1.m4s", "https://cdn.e.com/seg2.m4s"])
+        XCTAssertEqual(m.initSegment?.absoluteString, "https://e.com/v/hd/init.mp4")
+        XCTAssertTrue(m.isFragmentedMP4)
+        XCTAssertEqual(m.encryption, "NONE")
+    }
+
+    func testProtectedAndInvalid() throws {
+        let text = "#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://x\"\n#EXTINF:6,\na.ts\n"
+        guard case .media(let m) = try HLS.parse(text, base: URL(string: "https://e.com/i.m3u8")!) else { return XCTFail() }
+        XCTAssertEqual(m.encryption, "SAMPLE-AES")
+        XCTAssertThrowsError(try HLS.parse("<html>", base: URL(string: "https://e.com/")!))
+        XCTAssertTrue(HLS.isPlaylistURL(URL(string: "https://e.com/live/index.M3U8?token=1")!))
+    }
+}

@@ -30,7 +30,10 @@
   let target = null;
   let hideTimer = 0;
 
-  const size = (n) => (n > 0 ? ` (${(n / 1048576).toFixed(1)} MB)` : "");
+  const label = (m) =>
+    m.kind === "stream"
+      ? ` (${[m.height ? `${m.height}p` : "", m.live ? "live" : "", "best quality"].filter(Boolean).join(", ")})`
+      : m.size > 0 ? ` (${(m.size / 1048576).toFixed(1)} MB)` : "";
 
   function place() {
     if (!target || !target.isConnected) return hide();
@@ -56,8 +59,10 @@
     place();
   }
 
-  function send(url) {
-    chrome.runtime.sendMessage({ type: "send-link", url, referrer: location.href }, (r) => {
+  function send(m) {
+    const msg = { type: "send-link", url: m.url, referrer: location.href };
+    if (m.kind === "stream") Object.assign(msg, { stream: true, fileName: m.name });
+    chrome.runtime.sendMessage(msg, (r) => {
       button.textContent = r && r.ok ? "Sent to Nexonic" : "Open Nexonic first";
       setTimeout(hide, 1500);
     });
@@ -70,19 +75,21 @@
     chrome.runtime.sendMessage({ type: "video-button", src }, (r) => {
       const media = (r && r.media) || [];
       list.textContent = "";
-      if (media.length === 1) return send(media[0].url);
+      if (media.length === 1) return send(media[0]);
       if (!media.length) {
         const li = document.createElement("li");
         li.className = "note";
-        li.textContent = "This player streams in small pieces, which can't be saved yet. Play the video for a moment and try again.";
+        li.textContent = r && r.locked
+          ? "This video is copy-protected by the site, so it can't be saved."
+          : "No video found yet. Play the video for a few seconds, then click again.";
         li.style.whiteSpace = "normal";
         list.appendChild(li);
       }
       for (const m of media) {
         const li = document.createElement("li");
-        li.textContent = `${m.name}${size(m.size)}`;
+        li.textContent = `${m.name}${label(m)}`;
         li.title = m.url;
-        li.onclick = () => send(m.url);
+        li.onclick = () => send(m);
         list.appendChild(li);
       }
       list.hidden = false;

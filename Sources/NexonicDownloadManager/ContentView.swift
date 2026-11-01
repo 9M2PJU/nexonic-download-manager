@@ -337,13 +337,22 @@ struct DetailPane: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(item.fileName).font(.headline).lineLimit(1)
             Text(item.url.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled)
-            SegmentBar(segments: item.segments, size: item.size).frame(height: 14)
+            if item.isStream == true {
+                ProgressView(value: item.status == .finished ? 1 : item.progress).tint(brand)
+            } else {
+                SegmentBar(segments: item.segments, size: item.size).frame(height: 14)
+            }
             HStack(spacing: 16) {
-                Text("\(bytes(item.received)) of \(item.size.map(bytes) ?? "unknown size")")
+                Text(item.isStream == true && item.status != .finished ? "\(bytes(item.received)) so far (streamed video, best quality)"
+                 : "\(bytes(item.received)) of \(item.size.map(bytes) ?? "unknown size")")
                 if item.status.isActive {
                     Text(speed(bps))
                     if !eta.isEmpty { Text("\(eta) left") }
+                    if item.isStream == true {
+                    Text("Video pieces: \(item.streamDone ?? 0) of \(item.streamTotal ?? 0)")
+                } else {
                     Text("Connections: \(item.segments.filter { !$0.isComplete }.count)")
+                }
                 }
                 Text(item.acceptsRanges || item.status == .queued ? "Resume: yes" : "Resume: no")
                 Text("Queue: \(queue)")

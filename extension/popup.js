@@ -1,4 +1,4 @@
-import { DEFAULTS, filterLinks, formatSize } from "./helpers.js";
+import { DEFAULTS, filterLinks, qualityLabel } from "./helpers.js";
 
 const $ = (id) => document.getElementById(id);
 const ask = (msg) => chrome.runtime.sendMessage(msg);
@@ -45,12 +45,16 @@ if (tab) {
   $("noMedia").hidden = media.length > 0;
   for (const m of media) {
     const b = document.createElement("button");
-    b.textContent = "Download";
+    b.textContent = m.protected ? "Protected" : "Download";
+    b.disabled = !!m.protected;
+    b.title = m.protected ? "The site protects this video, so it can't be saved" : "Best quality";
     b.onclick = async () => {
-      const r = await ask({ type: "send-link", url: m.url, referrer: tab.url });
+      const msg = { type: "send-link", url: m.url, referrer: tab.url };
+      if (m.kind === "stream") Object.assign(msg, { stream: true, fileName: m.name });
+      const r = await ask(msg);
       b.textContent = r && r.ok ? "Sent" : "Failed";
     };
-    const li = item(m.url, `${m.name} ${formatSize(m.size)}`, document.createTextNode(""));
+    const li = item(m.url, `${m.name} · ${qualityLabel(m)}`, document.createTextNode(""));
     li.append(b);
     $("media").append(li);
   }

@@ -47,3 +47,30 @@ test("small helpers", () => {
   const list = addMedia(addMedia([], { url: "a" }), { url: "b" });
   assert.deepEqual(addMedia(list, { url: "a" }).map((m) => m.url), ["a", "b"]);
 });
+
+import { isStreamPlaylist, qualityLabel, sortMedia, summarizePlaylist, titleToName } from "./helpers.js";
+
+test("stream playlists", () => {
+  assert.equal(isStreamPlaylist("https://e.com/v/master.m3u8?t=1", ""), true);
+  assert.equal(isStreamPlaylist("https://e.com/v/play", "application/vnd.apple.mpegurl"), true);
+  assert.equal(isStreamPlaylist("https://e.com/v/a.mp4", "video/mp4"), false);
+  const master = summarizePlaylist(
+    "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\nhd.m3u8\n",
+    "https://e.com/v/master.m3u8",
+  );
+  assert.equal(master.master, true);
+  assert.equal(master.height, 1080);
+  assert.deepEqual(master.variants, ["https://e.com/v/low.m3u8", "https://e.com/v/hd.m3u8"]);
+  const locked = summarizePlaylist('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://k"\n#EXTINF:6,\na.ts\n', "https://e.com/");
+  assert.equal(locked.protected, true);
+  assert.equal(locked.live, true);
+  assert.equal(summarizePlaylist("<html>", "https://e.com/").valid, false);
+});
+
+test("names, order and labels", () => {
+  assert.equal(titleToName("My Talk: Part 1 | Conference"), "My Talk Part 1");
+  assert.equal(titleToName(""), "video");
+  const sorted = sortMedia([{ url: "a", size: 10 }, { url: "b", kind: "stream", height: 720 }, { url: "c", kind: "stream", height: 1080 }]);
+  assert.deepEqual(sorted.map((m) => m.url), ["c", "b", "a"]);
+  assert.equal(qualityLabel({ kind: "stream", height: 1080 }), "1080p · stream");
+});

@@ -71,6 +71,7 @@ public sealed record DownloadJob(string Url, string? FileName = null, string? Re
     public string? Password { get; init; }
     public string? Checksum { get; init; }
     public int? SpeedLimitKBps { get; init; }
+    public bool? Stream { get; init; }
 
     /// <summary>Only plain web links are accepted.</summary>
     public bool IsValid => Uri.TryCreate(Url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");

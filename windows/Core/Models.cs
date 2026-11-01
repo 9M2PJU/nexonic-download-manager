@@ -40,9 +40,16 @@ public sealed class DownloadRecord
     public string? ChecksumResult { get; set; }
     public int? SpeedLimitKBps { get; set; }
     public bool? AwaitingRefresh { get; set; }
+    // Added in 0.3.0: streamed video
+    public bool? IsStream { get; set; }
+    public int? StreamDone { get; set; }
+    public int? StreamTotal { get; set; }
+    public long? StreamBytes { get; set; }
 
-    public long Received { get { lock (Segments) return Segments.Sum(s => s.Written); } }
-    public double Progress => Size is > 0 ? Math.Min(1, (double)Received / Size.Value) : 0;
+    public long Received { get { if (IsStream == true) return StreamBytes ?? 0; lock (Segments) return Segments.Sum(s => s.Written); } }
+    public double Progress => IsStream == true
+        ? (StreamTotal is > 0 ? Math.Min(1, (double)(StreamDone ?? 0) / StreamTotal.Value) : 0)
+        : Size is > 0 ? Math.Min(1, (double)Received / Size.Value) : 0;
     public FileCategory Category => FileCategories.Of(FileName);
     public bool IsActive => Status is DownloadStatus.Probing or DownloadStatus.Downloading;
     public string Queue => QueueId ?? DownloadQueue.MainId;

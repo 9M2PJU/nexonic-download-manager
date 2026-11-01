@@ -27,7 +27,7 @@ final class DownloadManager: ObservableObject {
         }
     }
 
-    private var transfers: [UUID: Transfer] = [:]
+    private var transfers: [UUID: Downloader] = [:]
     private var lastReceived: [UUID: Int64] = [:]
     private var requeue: Set<UUID> = []
     private var pendingRefresh: [UUID: String?] = [:]
@@ -81,7 +81,9 @@ final class DownloadManager: ObservableObject {
 
     func add(_ job: DownloadJob, options o: AddOptions = AddOptions()) {
         guard let url = job.validURL else { return }
-        let name = job.fileName.map(FileNames.sanitize) ?? FileNames.fromURL(url)
+        let stream = job.stream == true || HLS.isPlaylistURL(url)
+        var name = job.fileName.map(FileNames.sanitize) ?? FileNames.fromURL(url)
+        if stream { name = (name as NSString).deletingPathExtension + ".mp4" }
         // A link the user asked to refresh: keep what is downloaded and continue from the new address.
         if let i = items.firstIndex(where: { $0.awaitingRefresh == true && $0.fileName == name }) {
             items[i].url = url
@@ -95,8 +97,9 @@ final class DownloadManager: ObservableObject {
             return
         }
         let folder = job.folder.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? o.folder ?? settings.folder
-        var record = DownloadRecord(url: url, folder: folder, fileName: job.fileName, referrer: job.referrer,
+        var record = DownloadRecord(url: url, folder: folder, fileName: name, referrer: job.referrer,
                                     cookies: job.cookies, userAgent: job.userAgent)
+        if stream { record.isStream = true }
         record.queueID = job.queue.map(queueID(named:)) ?? o.queueID
         record.username = job.username ?? (o.username.isEmpty ? nil : o.username)
         record.password = job.password ?? (o.password.isEmpty ? nil : o.password)
@@ -299,8 +302,11 @@ final class DownloadManager: ObservableObject {
             var slots = max(1, limit) - items.filter { $0.queue == q.id && $0.status.isActive }.count
             for item in items where item.queue == q.id && item.status == .queued && slots > 0 && transfers[item.id] == nil {
                 slots -= 1
-                let t = Transfer(record: item, connections: settings.connections, limiter: limiter,
-                                 sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
+                let t: Downloader = item.isStream == true
+                    ? StreamTransfer(record: item, connections: settings.connections, limiter: limiter,
+                                     sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
+                    : Transfer(record: item, connections: settings.connections, limiter: limiter,
+                               sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
                 t.onChange = { [weak self] rec in Task { @MainActor in self?.changed(rec) } }
                 transfers[item.id] = t
                 update(item.id) { $0.status = .probing }

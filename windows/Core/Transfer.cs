@@ -7,7 +7,7 @@ namespace Nexonic.Core;
 /// One download: probes the server, splits the file into byte ranges, downloads them in parallel into part files,
 /// splits the largest remaining range whenever a connection frees up, retries failed ranges and joins the parts.
 /// </summary>
-public sealed class Transfer
+public sealed class Transfer : IDownloader
 {
     public DownloadRecord Record { get; }
     public event Action<DownloadRecord>? Changed;

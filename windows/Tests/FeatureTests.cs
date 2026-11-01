@@ -114,3 +114,42 @@ public class FeatureTests
         Assert.False(j.Start);
     }
 }
+
+public class HLSTests
+{
+    [Fact]
+    public void MasterPicksBestQualityAndSound()
+    {
+        var text = "#EXTM3U\n" +
+                   "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"English\",DEFAULT=YES,URI=\"audio/en.m3u8\"\n" +
+                   "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360,CODECS=\"avc1.4d401e,mp4a.40.2\",AUDIO=\"aud\"\nlow/index.m3u8\n" +
+                   "#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080,AUDIO=\"aud\"\nhd/index.m3u8\n" +
+                   "#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720,AUDIO=\"aud\"\nmid/index.m3u8\n";
+        var p = HLS.Parse(text, new Uri("https://e.com/v/master.m3u8"));
+        Assert.True(p.IsMaster);
+        Assert.Equal(3, p.Variants.Count);
+        Assert.Equal("aud", p.Variants[0].AudioGroup);
+        Assert.Equal("https://e.com/v/hd/index.m3u8", HLS.Best(p.Variants)!.Url.AbsoluteUri);
+        Assert.Equal("https://e.com/v/audio/en.m3u8", p.Audio["aud"].AbsoluteUri);
+    }
+
+    [Fact]
+    public void MediaPlaylist()
+    {
+        var text = "#EXTM3U\r\n#EXT-X-TARGETDURATION:6\r\n#EXT-X-MAP:URI=\"init.mp4\"\r\n#EXTINF:6.0,\r\nseg1.m4s\r\n#EXTINF:6.0,\r\nhttps://cdn.e.com/seg2.m4s\r\n#EXT-X-ENDLIST\r\n";
+        var m = HLS.Parse(text, new Uri("https://e.com/v/hd/index.m3u8")).Media!;
+        Assert.Equal(new[] { "https://e.com/v/hd/seg1.m4s", "https://cdn.e.com/seg2.m4s" }, m.Segments.Select(u => u.AbsoluteUri));
+        Assert.Equal("https://e.com/v/hd/init.mp4", m.InitSegment!.AbsoluteUri);
+        Assert.True(m.IsFragmentedMp4);
+        Assert.Equal("NONE", m.Encryption);
+    }
+
+    [Fact]
+    public void ProtectedAndInvalid()
+    {
+        var m = HLS.Parse("#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://x\"\n#EXTINF:6,\na.ts\n", new Uri("https://e.com/i.m3u8")).Media!;
+        Assert.Equal("SAMPLE-AES", m.Encryption);
+        Assert.Throws<HLS.Failure>(() => HLS.Parse("<html>", new Uri("https://e.com/")));
+        Assert.True(HLS.IsPlaylistUrl("https://e.com/live/index.M3U8?token=1"));
+    }
+}
