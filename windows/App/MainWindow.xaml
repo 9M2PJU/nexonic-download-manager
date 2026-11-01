@@ -149,6 +149,7 @@
             <ContextMenu>
               <MenuItem Header="Open" Click="OnOpen" />
               <MenuItem Header="Show in Folder" Click="OnShowInFolder" />
+              <MenuItem Header="Show Progress" Click="OnShowProgress" />
               <Separator />
               <MenuItem Header="Resume" Click="OnResume" />
               <MenuItem Header="Stop" Click="OnPause" />

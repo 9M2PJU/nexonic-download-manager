@@ -19,6 +19,13 @@ struct SettingsView: View {
                 }
                 Toggle("Sort into category folders (Video, Music, Documents…)", isOn: $manager.settings.sortIntoCategoryFolders)
                 Toggle("Notifications", isOn: $manager.settings.notifications)
+                Section("Browser downloads") {
+                    Toggle("Show the download window when a link is clicked in the browser", isOn: $manager.settings.showDownloadDialog)
+                    Toggle("Show a progress window for each download I start", isOn: $manager.settings.showProgressWindow)
+                    Toggle("Bring the main window to the front for browser downloads", isOn: $manager.settings.bringToFrontOnBrowserDownload)
+                    Text("With the download window off, downloads start right away. The app keeps running in the menu bar when its window is closed.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gearshape") }

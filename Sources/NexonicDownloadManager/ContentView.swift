@@ -47,6 +47,7 @@ enum Sheet: Identifiable {
 let brand = Color(red: 0.0, green: 0.56, blue: 0.62)
 
 struct ContentView: View {
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject var manager: DownloadManager
     @State private var filter: SidebarFilter = .all
     @State private var selection = Set<UUID>()
@@ -106,6 +107,13 @@ struct ContentView: View {
             if let r = manager.addRequest { sheet = .add(r) }
         }
         .onOpenURL { _ in manager.collectInbox() }
+        .onAppear {
+            let open = openWindow
+            DownloadManager.showMainWindow = {
+                open(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
         .onAppear {
             Demo.start(manager) { name in
                 switch name {
@@ -225,6 +233,7 @@ struct ContentView: View {
         if ids.count == 1, let id = ids.first {
             Button("Open") { manager.open(id) }
             Button("Show in Finder") { manager.reveal(id) }
+            Button("Show Progress") { ProgressWindow.show(id, manager: manager) }
             Divider()
         }
         Button("Resume") { ids.forEach(manager.resume) }

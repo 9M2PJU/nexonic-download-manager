@@ -31,6 +31,10 @@ public sealed class DownloadManager
     public event Action<string, string>? Notify;
     public event Action<string>? ClipboardLink;
     public event Action? QuitRequested;
+    /// <summary>A link clicked in the browser that should open the download window.</summary>
+    public event Action<DownloadJob>? DownloadDialogRequested;
+    public event Action<Row>? ProgressRequested;
+    public event Action? ShowRequested;
 
     readonly Dictionary<Guid, IDownloader> transfers = new();
     readonly HashSet<string> queuesWithWork = new();
@@ -92,9 +96,9 @@ public sealed class DownloadManager
         return n;
     }
 
-    public void Add(DownloadJob job, AddOptions? o = null)
+    public Guid? Add(DownloadJob job, AddOptions? o = null)
     {
-        if (!job.IsValid) return;
+        if (!job.IsValid) return null;
         o ??= new AddOptions();
         var site = job.Site == true || (Nexonic.Core.SiteVideo.IsSupported(job.Url) && job.Stream != true);
         var stream = !site && (job.Stream == true || HLS.IsPlaylistUrl(job.Url));
@@ -114,7 +118,7 @@ public sealed class DownloadManager
             waiting.Refresh();
             Save();
             Schedule();
-            return;
+            return w.Id;
         }
         var limit = job.SpeedLimitKBps ?? o.SpeedLimitKBps;
         var rec = new DownloadRecord
@@ -135,13 +139,37 @@ public sealed class DownloadManager
         Rows.Insert(0, new Row(rec, QueueName));
         Schedule();
         Save();
+        return rec.Id;
     }
 
     static string? NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
 
+    /// <summary>
+    /// Downloads handed over by the browser extension and the ndm command. A link clicked in the browser opens the
+    /// download window (unless turned off); the same link already downloading is never added twice.
+    /// </summary>
     public void CollectInbox()
     {
-        foreach (var j in new Inbox().Collect()) Add(j);
+        var browser = false;
+        foreach (var j in new Inbox().Collect())
+        {
+            if (j.FromBrowser == true) browser = true;
+            if (Rows.FirstOrDefault(r => r.Record.Url == j.Url && (r.Record.IsActive || r.Record.Status == DownloadStatus.Queued)) is { } dup)
+            {
+                if (Settings.ShowProgressWindow && j.FromBrowser == true) ProgressRequested?.Invoke(dup);
+                continue;
+            }
+            if (j.FromBrowser == true && Settings.ShowDownloadDialog && DownloadDialogRequested != null)
+            {
+                DownloadDialogRequested(j);
+                continue;
+            }
+            var id = Add(j);
+            if (id is Guid g && j.FromBrowser == true && j.Start != false && Settings.ShowProgressWindow
+                && Rows.FirstOrDefault(r => r.Record.Id == g) is { } row)
+                ProgressRequested?.Invoke(row);
+        }
+        if (browser && Settings.BringToFrontOnBrowserDownload) ShowRequested?.Invoke();
     }
 
     // ---- control ----

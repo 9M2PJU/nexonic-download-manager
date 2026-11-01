@@ -156,6 +156,10 @@ public sealed class AppSettings
     public bool PlaySound { get; set; } = true;
     public bool MarkDownloads { get; set; } = true;
     public bool ScanEnabled { get; set; }
+    // Added in 0.5.0: download and progress windows
+    public bool ShowDownloadDialog { get; set; } = true;
+    public bool ShowProgressWindow { get; set; } = true;
+    public bool BringToFrontOnBrowserDownload { get; set; }
     public string ScanCommand { get; set; } = "\"%ProgramFiles%\\Windows Defender\\MpCmdRun.exe\" -Scan -ScanType 3 -DisableRemediation -File";
 }
 

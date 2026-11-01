@@ -200,12 +200,17 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var markDownloads: Bool = true
     public var scanEnabled: Bool = false
     public var scanCommand: String = ""
+    // Added in 0.5.0: download and progress windows
+    public var showDownloadDialog: Bool = true
+    public var showProgressWindow: Bool = true
+    public var bringToFrontOnBrowserDownload: Bool = false
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case connections, maxActive, speedLimitKBps, folder, sortIntoCategoryFolders, notifications, monitorClipboard,
-             clipboardTypes, proxy, showCompleteDialog, playSound, markDownloads, scanEnabled, scanCommand
+             clipboardTypes, proxy, showCompleteDialog, playSound, markDownloads, scanEnabled, scanCommand,
+             showDownloadDialog, showProgressWindow, bringToFrontOnBrowserDownload
     }
 
     /// Missing keys keep their defaults, so settings from older versions still load.
@@ -226,6 +231,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
         markDownloads = try c.decodeIfPresent(Bool.self, forKey: .markDownloads) ?? d.markDownloads
         scanEnabled = try c.decodeIfPresent(Bool.self, forKey: .scanEnabled) ?? d.scanEnabled
         scanCommand = try c.decodeIfPresent(String.self, forKey: .scanCommand) ?? d.scanCommand
+        showDownloadDialog = try c.decodeIfPresent(Bool.self, forKey: .showDownloadDialog) ?? d.showDownloadDialog
+        showProgressWindow = try c.decodeIfPresent(Bool.self, forKey: .showProgressWindow) ?? d.showProgressWindow
+        bringToFrontOnBrowserDownload = try c.decodeIfPresent(Bool.self, forKey: .bringToFrontOnBrowserDownload)
+            ?? d.bringToFrontOnBrowserDownload
     }
 }
 

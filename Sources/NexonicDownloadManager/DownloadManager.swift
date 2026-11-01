@@ -13,6 +13,10 @@ struct AddRequest: Identifiable {
 
 @MainActor
 final class DownloadManager: ObservableObject {
+    static let shared = DownloadManager()
+    /// Opens and fronts the main window (set by the app once its scene exists).
+    static var showMainWindow: (() -> Void)?
+
     @Published private(set) var items: [DownloadRecord] = []
     @Published private(set) var speeds: [UUID: Double] = [:]  // bytes per second
     @Published var queues: [DownloadQueue] = [] {
@@ -88,8 +92,9 @@ final class DownloadManager: ObservableObject {
         }
     }
 
-    func add(_ job: DownloadJob, options o: AddOptions = AddOptions()) {
-        guard let url = job.validURL else { return }
+    @discardableResult
+    func add(_ job: DownloadJob, options o: AddOptions = AddOptions()) -> UUID? {
+        guard let url = job.validURL else { return nil }
         let site = job.site == true || (SiteVideo.isSupported(url) && job.stream != true)
         let stream = !site && (job.stream == true || HLS.isPlaylistURL(url))
         var name = job.fileName.map(FileNames.sanitize) ?? FileNames.fromURL(url)
@@ -105,7 +110,7 @@ final class DownloadManager: ObservableObject {
             items[i].error = nil
             persist()
             schedule()
-            return
+            return items[i].id
         }
         let folder = job.folder.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? o.folder ?? settings.folder
         var record = DownloadRecord(url: url, folder: folder, fileName: name, referrer: job.referrer,
@@ -125,6 +130,7 @@ final class DownloadManager: ObservableObject {
         items.append(record)
         schedule()
         persist()
+        return record.id
     }
 
     func addBatch(_ pattern: String, options: AddOptions) throws -> Int {
@@ -133,10 +139,30 @@ final class DownloadManager: ObservableObject {
         return links.count
     }
 
+    /// Downloads handed over by the browser extension and the ndm command.
+    /// A link the user clicked in the browser opens the download window (unless turned off); the same link
+    /// already downloading is never added twice, its progress window is shown instead.
     func collectInbox() {
         let jobs = Inbox().collect()
-        for job in jobs { add(job) }
-        if !jobs.isEmpty { NSApp.activate(ignoringOtherApps: false) }
+        guard !jobs.isEmpty else { return }
+        var browserJob = false
+        for job in jobs {
+            if job.fromBrowser == true { browserJob = true }
+            if let dup = items.first(where: { $0.url.absoluteString == job.url && ($0.status.isActive || $0.status == .queued) }) {
+                if settings.showProgressWindow && job.fromBrowser == true { ProgressWindow.show(dup.id, manager: self) }
+                continue
+            }
+            if DownloadInfoWindow.isOpen(for: job.url) { continue }
+            if job.fromBrowser == true && settings.showDownloadDialog {
+                DownloadInfoWindow.show(job, manager: self)
+                continue
+            }
+            let id = add(job)
+            if let id, job.fromBrowser == true, job.start != false, settings.showProgressWindow {
+                ProgressWindow.show(id, manager: self)
+            }
+        }
+        if browserJob && settings.bringToFrontOnBrowserDownload { Self.showMainWindow?() }
     }
 
     // MARK: control

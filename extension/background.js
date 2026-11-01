@@ -16,7 +16,11 @@ async function send(url, extra = {}) {
   }
   const message = { type: "download", url, cookies, userAgent: navigator.userAgent, ...extra };
   try {
-    const reply = await chrome.runtime.sendNativeMessage(HOST, message);
+    // A helper that doesn't answer within a few seconds counts as unreachable, so the browser keeps the download.
+    const reply = await Promise.race([
+      chrome.runtime.sendNativeMessage(HOST, message),
+      new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+    ]);
     const ok = !!(reply && reply.ok);
     await chrome.action.setBadgeText({ text: ok ? "" : "!" });
     return ok;
@@ -28,6 +32,8 @@ async function send(url, extra = {}) {
 
 // ---- Browser downloads go to the app ----
 
+const handedOver = new Map(); // link -> time, so one click is never sent to the app twice
+
 chrome.downloads.onCreated.addListener(async (item) => {
   if (!shouldTakeOver(item, await settings())) return;
   try {
@@ -36,8 +42,19 @@ chrome.downloads.onCreated.addListener(async (item) => {
     return; // already finished or not pausable
   }
   const url = item.finalUrl || item.url;
+  const now = Date.now();
+  for (const [u, t] of handedOver) if (now - t > 10000) handedOver.delete(u);
+  if (handedOver.has(url)) {
+    // The same link a moment ago (a redirect or a double click): the app already has it.
+    await chrome.downloads.cancel(item.id).catch(() => {});
+    await chrome.downloads.erase({ id: item.id }).catch(() => {});
+    return;
+  }
+  handedOver.set(url, now);
   const name = item.filename ? item.filename.split(/[\\/]/).pop() : undefined;
-  const ok = await send(url, { referrer: item.referrer || "", fileName: name });
+  const size = item.totalBytes > 0 ? item.totalBytes : item.fileSize > 0 ? item.fileSize : undefined;
+  const ok = await send(url, { referrer: item.referrer || "", fileName: name, size, browser: true });
+  if (!ok) handedOver.delete(url);
   if (ok) {
     await chrome.downloads.cancel(item.id).catch(() => {});
     await chrome.downloads.erase({ id: item.id }).catch(() => {});
@@ -66,7 +83,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     return;
   }
   const url = info.linkUrl || info.srcUrl;
-  if (url && /^https?:\/\//i.test(url)) send(url, { referrer });
+  if (url && /^https?:\/\//i.test(url)) send(url, { referrer, browser: true });
 });
 
 /** Links on a page (only inside the selection when there is one). */

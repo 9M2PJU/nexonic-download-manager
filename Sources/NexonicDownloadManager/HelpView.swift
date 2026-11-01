@@ -45,6 +45,7 @@ enum HelpContent {
         HelpTopic(id: "browser", title: "Browser Extension", symbol: "puzzlepiece.extension", sections: [
             HelpSection(heading: "Chrome, Edge, Brave and Opera", text: "Open the app once. Unzip NexonicExtension-Chrome.zip, open the browser's extensions page, turn on Developer mode, click Load unpacked and choose the folder. You can also save the extension folder from Settings, under Browsers & Command Line."),
             HelpSection(heading: "Firefox", text: "Drag NexonicAddon-Firefox.xpi onto Firefox. For a quick test, open about:debugging and choose Load Temporary Add-on."),
+            HelpSection(heading: "Download and progress windows", text: "When you click a download link in the browser, the download window shows the file name, size, category and folder: choose Start Download, Download Later or Cancel. Each download you start gets its own progress window with the speed, time left, a speed graph and every connection. Turn either window off in Settings, General."),
             HelpSection(heading: "What it does", text: "Downloads from the browser are handed to the app automatically. Right-click a link and choose Download with Nexonic, or use the video button that appears on pages with video."),
         ]),
         HelpTopic(id: "video", title: "Saving Videos", symbol: "play.rectangle", sections: [

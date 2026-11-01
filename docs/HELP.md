@@ -28,6 +28,8 @@ The same guide is built into the app: **Help → Nexonic Download Manager Help**
 
 **Firefox.** Drag NexonicAddon-Firefox.xpi onto Firefox. For a quick test, open about:debugging and choose Load Temporary Add-on.
 
+**Download and progress windows.** When you click a download link in the browser, the download window shows the file name, size, category and folder: choose Start Download, Download Later or Cancel. Each download you start gets its own progress window with the speed, time left, a speed graph and every connection. Turn either window off in Settings, General.
+
 **What it does.** Downloads from the browser are handed to the app automatically. Right-click a link and choose Download with Nexonic, or use the video button that appears on pages with video.
 
 ## Saving Videos

@@ -231,6 +231,7 @@ public partial class MainWindow : Window
         if (One?.Record.SavedPath is { } p) Process.Start("explorer.exe", $"/select,\"{p}\"");
     }
 
+    void OnShowProgress(object s, RoutedEventArgs e) { if (One is { } r) DownloadWindows.ShowProgress(manager, r); }
     void OnCopyLink(object s, RoutedEventArgs e) { if (One is { } r) Clipboard.SetText(r.Record.Url); }
     void OnRefreshLink(object s, RoutedEventArgs e) { if (One is { } r) Dialogs.RefreshLink(this, manager, r); }
     void OnProperties(object s, RoutedEventArgs e) { if (One is { } r) Dialogs.Properties(this, manager, r); }

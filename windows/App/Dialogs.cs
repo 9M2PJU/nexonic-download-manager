@@ -479,6 +479,11 @@ public static class Dialogs
         var folder = Box(general, "Save to folder", s.Folder);
         var sort = Tick(general, "Sort into category folders (Video, Music, Documents…)", s.SortIntoCategoryFolders);
         var notify = Tick(general, "Notifications", s.Notifications);
+        general.Children.Add(new TextBlock { Text = "Browser downloads", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 14, 0, 0) });
+        var askDialog = Tick(general, "Show the download window when a link is clicked in the browser", s.ShowDownloadDialog);
+        var progressWin = Tick(general, "Show a progress window for each download I start", s.ShowProgressWindow);
+        var toFront = Tick(general, "Bring the main window to the front for browser downloads", s.BringToFrontOnBrowserDownload);
+        Hint(general, "With the download window off, downloads start right away. Closing the main window keeps the app running in the tray.");
 
         var connection = Tab("Connection");
         var limit = Box(connection, "Speed limit for all downloads in KB/s (0 = none)", s.SpeedLimitKBps.ToString());
@@ -527,6 +532,9 @@ public static class Dialogs
             s.Folder = folder.Text.Trim().Length > 0 ? folder.Text.Trim() : s.Folder;
             s.SortIntoCategoryFolders = sort.IsChecked == true;
             s.Notifications = notify.IsChecked == true;
+            s.ShowDownloadDialog = askDialog.IsChecked == true;
+            s.ShowProgressWindow = progressWin.IsChecked == true;
+            s.BringToFrontOnBrowserDownload = toFront.IsChecked == true;
             s.SpeedLimitKBps = Number(limit.Text);
             s.Proxy = new ProxySettings
             {

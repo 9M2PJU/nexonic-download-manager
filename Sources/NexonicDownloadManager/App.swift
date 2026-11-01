@@ -4,7 +4,8 @@ import SwiftUI
 
 @main
 struct NexonicDownloadManagerApp: App {
-    @StateObject private var manager = DownloadManager()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var manager = DownloadManager.shared
 
     init() { HostInstaller.install() }
 
@@ -34,6 +35,21 @@ struct NexonicDownloadManagerApp: App {
         }
         MenuBarExtra("Nexonic", systemImage: "arrow.down.circle") {
             MenuBarView().environmentObject(manager)
+        }
+    }
+}
+
+/// Links from the browser helper (nexonicdm://inbox, nexonicdm://show) are handled here, so a download from the
+/// browser is added to the running app without opening or fronting a window unless the user wants that.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if url.host == "show" {
+                if let show = DownloadManager.showMainWindow { show() } else { NSApp.activate(ignoringOtherApps: true) }
+            } else {
+                DownloadManager.shared.collectInbox()
+            }
         }
     }
 }

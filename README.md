@@ -64,7 +64,11 @@ still shows the old icon, quit the app and open it again (on Mac, restarting the
 - **Videos from YouTube, Instagram, Facebook, X, TikTok and 1,000+ sites**, in the best quality (up to 4K/8K) or sound
   only.
 - **Download this video** button on any web page, and streamed video saved as one `.mp4`.
-- **Browser integration** for Chrome, Edge, Brave, Opera and Firefox.
+- **Browser integration** for Chrome, Edge, Brave, Opera and Firefox: click a download link and a compact download window
+  shows the name, size, category and folder (Start, Download Later or Cancel). If the app can't be reached, the browser
+  simply keeps the download.
+- **A progress window for every download** with speed, time left, a live speed graph, each connection's progress, and
+  Pause/Resume/Cancel. Several downloads run side by side, each in its own window.
 - **Scheduler and queues:** start at night, stop in the morning, sleep or shut down when done.
 - **Batch downloads** (`img[001-100].jpg`), a **site grabber**, and **clipboard** detection.
 - **Speed limits**, proxy, password-protected downloads and checksum checks.

@@ -1,3 +1,17 @@
+## 0.5.0
+
+- **Download window:** clicking a download link in Chrome, Edge, Brave, Opera or Firefox opens a compact window with the
+  file name (editable), size, address, category, folder and queue, and Start Download / Download Later / Cancel. The
+  size and the real file name are read from the server when the browser doesn't know them.
+- **Progress window for each download:** status, size, downloaded, transfer rate, time left, resume capability, a live
+  speed graph, the start positions and progress of every connection, and Pause/Resume, Cancel and Hide details.
+  Several downloads each get their own window; finished downloads close theirs.
+- **New options** (Settings/Options, General): show the download window, show progress windows, and bring the main
+  window to the front for browser downloads. Otherwise the app stays in the background (menu bar or tray).
+- **No duplicates:** the same link is never added twice (a second click shows the running download), and the extension
+  ignores repeated hand-offs of one link. If the app doesn't answer within 8 seconds, the browser keeps the download.
+- Show Progress in the right-click menu of the download list.
+
 ## 0.4.5
 
 - **One app window only:** downloads sent from the browser are added to the app that is already running instead of
