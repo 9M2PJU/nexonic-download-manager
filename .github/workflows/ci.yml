@@ -34,7 +34,7 @@ jobs:
       - name: Video engine joins picture and sound (local test video)
         run: |
           brew list ffmpeg >/dev/null 2>&1 || brew install -q ffmpeg
-          mkdir -p /tmp/site && cd /tmp/site
+          mkdir -p /tmp/site && pushd /tmp/site
           ffmpeg -loglevel error -f lavfi -i testsrc=size=640x360:rate=25 -f lavfi -i sine=frequency=440 -t 4 -map 0:v -map 1:a \
             -c:v libx264 -c:a aac -f dash -adaptation_sets "id=0,streams=v id=1,streams=a" dash.mpd
           python3 -m http.server 8777 >/dev/null 2>&1 &
@@ -43,6 +43,7 @@ jobs:
           "$M/yt-dlp" --ignore-config --ffmpeg-location "$M" -f "bv*+ba/b" --merge-output-format "mp4/mkv" -P /tmp/out \
             -o "test.%(ext)s" http://127.0.0.1:8777/dash.mpd
           "$M/ffprobe" -v error -show_entries stream=codec_type -of csv /tmp/out/test.mp4 | sort | tr '\n' ' ' | grep -q "stream,audio stream,video"
+          popd
           plutil -lint "build/Nexonic Download Manager.app/Contents/Info.plist"
           python3 scripts/host-ping.py "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host"
       - uses: actions/upload-artifact@v4
