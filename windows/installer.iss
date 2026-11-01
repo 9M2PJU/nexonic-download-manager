@@ -47,3 +47,6 @@ end;
 
 [Run]
 Filename: "{app}\NexonicDownloadManager.exe"; Description: "Start Nexonic Download Manager"; Flags: nowait postinstall skipifsilent
+
+[Messages]
+FinishedLabel=Thank you for installing Nexonic Download Manager!%n%nMore tools and updates:%ngithub.com/Shahrukhalid%nwww.shahrukhalid.com

@@ -46,12 +46,15 @@ else
   codesign --force --deep -s - "$APP"
 fi
 
-STAGE="build/dmg"
-mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-cp -R "$APP/Contents/Resources/Extension" "$STAGE/Browser Extension"
-cp "$APP/Contents/Resources/Firefox Add-on.xpi" "$STAGE/Firefox Add-on.xpi"
-hdiutil create -volname "Nexonic Download Manager" -srcfolder "$STAGE" -ov -format UDZO \
-  "build/NexonicDownloadManager-$VERSION.dmg" >/dev/null
+# Installer window: background with instructions and links, icons placed on it (packaging/dmg-settings.py).
+EXTRA="build/dmg-extra"
+mkdir -p "$EXTRA"
+cp -R "$APP/Contents/Resources/Extension" "$EXTRA/Browser Extension"
+cp "$APP/Contents/Resources/Firefox Add-on.xpi" "$EXTRA/Firefox Add-on.xpi"
+tiffutil -cathidpicheck packaging/dmg-background.png packaging/dmg-background@2x.png -out build/dmg-background.tiff 2>/dev/null
+python3 -m venv build/venv && build/venv/bin/pip install -q "dmgbuild>=1.6,<2"
+build/venv/bin/dmgbuild -s packaging/dmg-settings.py \
+  -D app="$APP" -D extension="$EXTRA/Browser Extension" -D xpi="$EXTRA/Firefox Add-on.xpi" \
+  -D icns="$APP/Contents/Resources/AppIcon.icns" -D background=build/dmg-background.tiff \
+  "Nexonic Download Manager" "build/NexonicDownloadManager-$VERSION.dmg" >/dev/null
 echo "Built $APP, build/NexonicDownloadManager-$VERSION.dmg, build/NexonicExtension-$VERSION.zip and build/NexonicFirefoxAddon-$VERSION.xpi"

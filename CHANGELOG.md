@@ -1,3 +1,10 @@
+## 0.4.2
+
+- New app icon on Mac, Windows and in the browser extension.
+- Mac installer window: clear "drag to Applications" layout, the browser add-ons below, and a thank-you note with links
+  to github.com/Shahrukhalid and www.shahrukhalid.com.
+- Windows installer: the same thank-you note and links on the last page.
+
 ## 0.4.1
 
 - Video sites: the progress bar, speed and time left now update while a video downloads (before, it jumped from 0% to
