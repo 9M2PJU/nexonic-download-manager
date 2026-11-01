@@ -4,6 +4,8 @@
 
 **Fast, free download manager for Mac and Windows, with browser extensions for Chrome, Edge, Brave and Firefox.**
 
+A free, open-source alternative to Internet Download Manager (IDM), for Mac as well as Windows.
+
 Splits every download into up to 32 connections · pauses and resumes, even after a restart · queues and a scheduler ·
 catches downloads and videos from your browser
 
@@ -14,6 +16,16 @@ catches downloads and videos from your browser
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 </div>
+
+### Video and audio
+
+Point at a video or audio player on a web page and click **Download this video**, or open the extension popup to see
+every video and audio file the page has loaded. This works on sites that play ordinary video files (news sites, course
+platforms, blogs, file hosts, your own media). Large video and social platforms usually stream video in many small
+encrypted or split pieces, which the app can't save as one file. Only download what you have the right to save.
+
+<sub>Nexonic Download Manager is an independent project and is not affiliated with Internet Download Manager or its
+makers.</sub>
 
 ## Download
 
