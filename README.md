@@ -31,7 +31,14 @@ Everything is included. Nothing else to install.
 
 ## Install
 
-**Mac**
+**Mac, quickest:** paste this into Terminal. It installs (or updates) the app in Applications and opens it, with no
+security warning:
+
+```bash
+curl -fsSL https://shahrukhalid.github.io/nexonic-download-manager/install.sh | bash
+```
+
+**Mac, from the disk image**
 
 1. Open the `.dmg`, read the Terms of Use and click **Agree**.
 2. Drag **Nexonic Download Manager** onto **Applications** (replace the old version if asked), then open it from

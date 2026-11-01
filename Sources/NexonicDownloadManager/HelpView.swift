@@ -72,7 +72,7 @@ enum HelpContent {
         ]),
         HelpTopic(id: "trouble", title: "Troubleshooting", symbol: "wrench.and.screwdriver", sections: [
             HelpSection(heading: "A link has expired", text: "Right-click the download, choose Refresh Link and paste a fresh link. The download continues without starting over."),
-            HelpSection(heading: "macOS won't open the app", text: "Open System Settings, then Privacy & Security, and click Open Anyway. On macOS 13 and 14 you can also right-click the app and choose Open."),
+            HelpSection(heading: "macOS won't open the app", text: "Install or update with one Terminal command and macOS won't ask: curl -fsSL https://shahrukhalid.github.io/nexonic-download-manager/install.sh | bash — otherwise open System Settings, then Privacy & Security, and click Open Anyway. On macOS 13 and 14 you can also right-click the app and choose Open."),
             HelpSection(heading: "macOS says the app is damaged", text: "Open Terminal and run: xattr -cr \"/Applications/Nexonic Download Manager.app\" Then open the app again. This happens because the app is free and not sold through Apple."),
             HelpSection(heading: "The old icon still shows", text: "Install the new version over the old one in Applications, quit the app and open it again. Restarting the Mac refreshes the icon cache."),
             HelpSection(heading: "The browser doesn't hand over downloads", text: "Open the app once so it can register itself with your browsers, then restart the browser."),
