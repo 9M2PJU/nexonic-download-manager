@@ -33,7 +33,7 @@ final class FeatureTests: XCTestCase {
 
     func testLinksAndScope() {
         let base = URL(string: "https://e.com/files/index.html")!
-        let html = #"<a href="a.zip">a</a> <a href='/files/sub/'>s</a> <img src=pic.jpg> <a href="#top">t</a> <a href="mailto:x@e.com">m</a> <a href="a.zip#x">dup</a>"#
+        let html = ##"<a href="a.zip">a</a> <a href='/files/sub/'>s</a> <img src=pic.jpg> <a href="#top">t</a> <a href="mailto:x@e.com">m</a> <a href="a.zip#x">dup</a>"##
         let links = LinkExtractor.links(in: html, base: base).map(\.absoluteString)
         XCTAssertEqual(links, ["https://e.com/files/a.zip", "https://e.com/files/sub/", "https://e.com/files/pic.jpg"])
         let o = GrabOptions(start: base, depth: 2, types: ["zip"])
