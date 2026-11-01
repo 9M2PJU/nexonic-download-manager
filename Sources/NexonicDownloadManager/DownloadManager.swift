@@ -57,6 +57,13 @@ final class DownloadManager: ObservableObject {
         schedule()
     }
 
+    /// Sample list for the README screenshots (only used when the app is started with NDM_DEMO=1).
+    func loadDemo(_ records: [DownloadRecord], queues extra: [DownloadQueue]) {
+        items = records
+        queues = [.main] + extra
+        schedule()
+    }
+
     // MARK: adding
 
     struct AddOptions {

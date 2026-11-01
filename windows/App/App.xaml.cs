@@ -54,6 +54,7 @@ public partial class App : Application
         };
         manager.ClipboardLink += link => window.ShowAdd(link);
         manager.QuitRequested += () => Quit(manager);
+        Demo.Start(manager, window);
         _ = ListenAsync(manager);
     }
 

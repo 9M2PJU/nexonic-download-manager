@@ -17,6 +17,17 @@ catches downloads and videos from your browser
 
 </div>
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/mac-main.png" alt="Nexonic Download Manager on Mac: downloads list with sidebar, toolbar and details" width="900">
+</p>
+
+| Add URL | Scheduler | Windows |
+|---|---|---|
+| ![Add URL window](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/mac-add.png) | ![Scheduler with a night queue](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/mac-scheduler.png) | ![Windows app](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/windows-main.png) |
+
+<sub>Real screenshots, taken automatically from the latest build. More: [dark mode](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/mac-main-dark.png),
+[Batch](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/mac-batch.png), [Windows Add URL](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/windows-add.png), [Windows Scheduler](https://raw.githubusercontent.com/Shahrukhalid/nexonic-download-manager/screenshots/windows-scheduler.png).</sub>
+
 ### Video and audio, in the best quality
 
 Point at a video player on a web page and click **Download this video**, or open the extension popup to see every
@@ -25,7 +36,8 @@ video the page has loaded, best quality first. It saves:
 - **Ordinary video and audio files** (MP4, WebM, MP3 …) at full size.
 - **Streamed video (HLS)**, the way most news, course, conference, event and many social sites deliver video: the app
   picks the **highest resolution and bit rate** on offer, downloads the pieces in parallel, resumes after a pause or
-  restart, and joins picture and sound into one `.mp4` named after the page.
+  restart, and joins picture and sound into one `.mp4` named after the page. Everything it needs is built in: nothing
+  else to install.
 
 It does **not** save copy-protected video (Netflix-style DRM, or sites that encrypt their streams on purpose) and it
 does not get around any site's protection; the extension shows "copy-protected" for those. Some large platforms also
@@ -126,6 +138,8 @@ state, file type and queue, and the status bar shows how many are running and th
 - **Streamed video (HLS):** best quality picked automatically, pieces downloaded in parallel, picture and sound joined
   into one `.mp4`, resumable. Paste a `.m3u8` link into **Add URL** or use the browser button.
 - **Categories:** Compressed, Documents, Music, Video, Programs, Images; optionally saved into category folders.
+- **All included:** one download, nothing else to install. The app carries a small built-in copy of ffmpeg (LGPL,
+  only used to put streamed video into `.mp4`; see `FFMPEG-LICENSE.txt` in the app).
 - **Private:** no account, no tracking, nothing sent anywhere except the downloads you start.
 
 ## Command line
@@ -143,9 +157,6 @@ ndm help
 
 ## Troubleshooting
 
-- **A streamed video was saved as `.ts`, or picture and sound as two files:** install the free ffmpeg tool once and
-  the app joins them into one `.mp4` automatically (Mac: `brew install ffmpeg`; Windows: `winget install ffmpeg`).
-  `.ts` files already play in VLC and most players.
 - **"Download this video" finds nothing:** play the video for a few seconds first, then click again. If it says
   copy-protected, the site doesn't allow saving that video.
 

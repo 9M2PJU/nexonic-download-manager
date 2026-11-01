@@ -1,0 +1,92 @@
+name: Screenshots
+# Opens the real apps with a sample list and saves pictures of their windows to the "screenshots" branch (used by the README).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["Sources/**", "windows/App/**", "packaging/**", ".github/workflows/screenshots.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .ffmpeg-cache/mac
+          key: ffmpeg-mac-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - run: UNIVERSAL=0 bash scripts/build-app.sh
+      - name: Take the pictures
+        run: |
+          python3 scripts/demo-server.py 8099 &
+          sleep 1
+          APP="build/Nexonic Download Manager.app/Contents/MacOS/NexonicDownloadManager"
+          for shot in "main::light" "add:add:light" "scheduler:scheduler:light" "batch:batch:light" "main-dark::dark"; do
+            IFS=: read -r name sheet look <<< "$shot"
+            rm -rf "$HOME/Library/Application Support/Nexonic Download Manager"
+            NDM_DEMO=1 NDM_SNAPSHOT="$PWD/shots" NDM_NAME="mac-$name" NDM_SHEET="$sheet" NDM_APPEARANCE="$look" \
+              NDM_LIVE=http://127.0.0.1:8099/keynote.mp4 NDM_LIMIT=6000 "$APP" &
+            pid=$!
+            for i in $(seq 1 30); do [ -f "shots/mac-$name.png" ] && break; sleep 1; done
+            sleep 1; kill "$pid" 2>/dev/null || true
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-mac
+          path: shots/*.png
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet publish windows/App/App.csproj -c Release -r win-x64 --self-contained false -o out
+      - name: Take the pictures
+        shell: pwsh
+        run: |
+          $server = Start-Process python -ArgumentList "scripts/demo-server.py", "8099" -PassThru -WindowStyle Hidden
+          Start-Sleep 1
+          New-Item -ItemType Directory shots | Out-Null
+          foreach ($shot in @("main:", "add:add", "scheduler:scheduler", "batch:batch")) {
+            $name, $sheet = $shot.Split(":")
+            Remove-Item "$env:LOCALAPPDATA\Nexonic Download Manager" -Recurse -Force -ErrorAction SilentlyContinue
+            $env:NDM_DEMO = "1"; $env:NDM_SNAPSHOT = "$PWD\shots"; $env:NDM_NAME = "windows-$name"; $env:NDM_SHEET = $sheet
+            $env:NDM_LIVE = "http://127.0.0.1:8099/keynote.mp4"; $env:NDM_LIMIT = "6000"
+            $p = Start-Process out\NexonicDownloadManager.exe -PassThru
+            if (-not $p.WaitForExit(40000)) { $p.Kill() }
+          }
+          Stop-Process $server -ErrorAction SilentlyContinue
+          Get-ChildItem shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots-windows
+          path: shots/*.png
+  publish:
+    needs: [mac, windows]
+    if: always() && (needs.mac.result == 'success' || needs.windows.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shots-*
+          merge-multiple: true
+          path: ../shots
+      - name: Save to the screenshots branch
+        run: |
+          git fetch -q origin screenshots && git checkout -q screenshots || git checkout -q --orphan screenshots
+          git rm -rq --cached . 2>/dev/null || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp ../shots/*.png .
+          printf 'Pictures of the app for the README, made by the Screenshots workflow.\n' > README.md
+          git add -A
+          git -c user.name="Shahrukh Khalid" -c user.email="90670731+Shahrukhalid@users.noreply.github.com" commit -qm "Screenshots" || exit 0
+          git push -q origin screenshots

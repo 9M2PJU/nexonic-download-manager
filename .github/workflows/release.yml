@@ -10,6 +10,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .ffmpeg-cache/mac
+          key: ffmpeg-mac-${{ hashFiles('scripts/build-ffmpeg.sh') }}
       - name: Build (Apple silicon and Intel)
         run: bash scripts/build-app.sh
       - name: Draft release
@@ -23,12 +27,32 @@ jobs:
           cp "build/NexonicExtension-$V.zip" up/NexonicExtension-Chrome.zip
           cp "build/NexonicFirefoxAddon-$V.xpi" up/NexonicAddon-Firefox.xpi
           gh release create "$GITHUB_REF_NAME" --draft --title "Nexonic Download Manager $V" --notes-file CHANGELOG.md up/*
+  ffmpeg-windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: .ffmpeg-cache/windows
+          key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: sudo apt-get install -y -qq mingw-w64 && bash scripts/build-ffmpeg.sh windows .ffmpeg-cache/windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: .ffmpeg-cache/windows
   windows:
-    needs: release
+    needs: [release, ffmpeg-windows]
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: .ffmpeg-cache/windows
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"

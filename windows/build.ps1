@@ -11,6 +11,12 @@ if ($LASTEXITCODE -ne 0) { throw "App build failed" }
 dotnet publish windows\Host\Host.csproj @common
 if ($LASTEXITCODE -ne 0) { throw "Helper build failed" }
 Get-ChildItem $out -Filter *.pdb | Remove-Item
+# Small bundled ffmpeg (re-packs streamed video into .mp4), cross-built on Linux by scripts/build-ffmpeg.sh windows.
+if (Test-Path .ffmpeg-cache\windows\ffmpeg.exe) {
+  Copy-Item .ffmpeg-cache\windows\ffmpeg.exe, .ffmpeg-cache\windows\FFMPEG-LICENSE.txt $out
+} else {
+  Write-Warning "No .ffmpeg-cache\windows\ffmpeg.exe: streamed video will be saved without joining picture and sound"
+}
 python scripts\build-extensions.py
 if ($LASTEXITCODE -ne 0) { throw "Extension build failed" }
 Copy-Item build\extension-chrome "$out\Extension" -Recurse

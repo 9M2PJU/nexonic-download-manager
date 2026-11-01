@@ -112,11 +112,12 @@ public enum HLS {
     public static func isPlaylistURL(_ url: URL) -> Bool { url.pathExtension.lowercased() == "m3u8" }
 }
 
-/// Finds ffmpeg if the user has it, to turn saved streams into .mp4 files and join separate sound.
+/// The ffmpeg that ships inside the app (or one the user installed), used to turn saved streams into .mp4 files.
 public enum FFmpeg {
     public static var path: String? {
         let env = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"] + env.split(separator: ":").map(String.init)
+        let bundled = Bundle.main.executableURL?.deletingLastPathComponent().path
+        let dirs = [bundled].compactMap { $0 } + ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"] + env.split(separator: ":").map(String.init)
         return dirs.map { "\($0)/ffmpeg" }.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 

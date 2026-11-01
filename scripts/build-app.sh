@@ -16,6 +16,10 @@ rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 python3 scripts/build-extensions.py
 cp "$BIN/NexonicDownloadManager" "$APP/Contents/MacOS/"
 cp "$BIN/nexonic-host" "$APP/Contents/MacOS/"
+# Small bundled ffmpeg (re-packs streamed video into .mp4); built once and kept in .ffmpeg-cache/.
+if [ ! -x .ffmpeg-cache/mac/ffmpeg ]; then bash scripts/build-ffmpeg.sh mac .ffmpeg-cache/mac; fi
+cp .ffmpeg-cache/mac/ffmpeg "$APP/Contents/MacOS/ffmpeg"
+cp .ffmpeg-cache/mac/FFMPEG-LICENSE.txt "$APP/Contents/Resources/"
 sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
 cp -R build/extension-chrome "$APP/Contents/Resources/Extension"
 cp "build/NexonicFirefoxAddon-$VERSION.xpi" "$APP/Contents/Resources/Firefox Add-on.xpi"
@@ -30,6 +34,7 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
   codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP/Contents/MacOS/nexonic-host"
+  codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP/Contents/MacOS/ffmpeg"
   codesign --force --options runtime --timestamp -s "$SIGN_IDENTITY" "$APP"
 else
   codesign --force --deep -s - "$APP"

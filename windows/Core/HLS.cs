@@ -112,7 +112,7 @@ public static class HLS
         Uri.TryCreate(url, UriKind.Absolute, out var u) && u.AbsolutePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Finds ffmpeg if the user has it, to turn saved streams into .mp4 files and join separate sound.</summary>
+/// <summary>The ffmpeg that ships next to the app (or one on the PATH), used to turn saved streams into .mp4 files.</summary>
 public static class FFmpeg
 {
     public static string? Path

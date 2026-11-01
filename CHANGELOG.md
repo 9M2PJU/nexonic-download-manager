@@ -3,8 +3,11 @@
 - **Streamed video (HLS):** the extension now finds streamed videos on any site that doesn't copy-protect them, lists
   them best quality first (for example 1080p) with the page's title as the name, and hides the lower qualities.
 - The app downloads the highest resolution and bit rate, fetches the pieces in parallel, resumes after a pause or
-  restart, and joins picture and sound into one `.mp4` (with ffmpeg installed; otherwise a `.ts` that plays in VLC).
+  restart, and joins picture and sound into one `.mp4`.
+- Everything is included: the app carries a small built-in ffmpeg (LGPL, re-packing only), so streamed video always
+  comes out as one `.mp4` with no extra installs.
 - Copy-protected videos are shown as protected instead of failing later.
+- README shows real screenshots of the Mac and Windows apps, taken automatically from each build.
 - Paste a `.m3u8` link into Add URL, or use `ndm https://…/master.m3u8`.
 
 ## 0.2.1

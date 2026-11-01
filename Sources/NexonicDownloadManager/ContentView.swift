@@ -106,6 +106,16 @@ struct ContentView: View {
             if let r = manager.addRequest { sheet = .add(r) }
         }
         .onOpenURL { _ in manager.collectInbox() }
+        .onAppear {
+            Demo.start(manager) { name in
+                switch name {
+                case "add": sheet = .add(AddRequest(links: "https://example.com/files/course-lecture-09-1080p.mp4"))
+                case "scheduler": sheet = .scheduler(Demo.nightQueueID)
+                case "batch": sheet = .batch
+                default: break
+                }
+            }
+        }
         .onDrop(of: [.url, .plainText], isTargeted: nil) { providers in
             for p in providers {
                 _ = p.loadObject(ofClass: URL.self) { url, _ in

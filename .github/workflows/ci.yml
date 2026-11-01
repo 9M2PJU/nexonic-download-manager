@@ -11,6 +11,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .ffmpeg-cache/mac
+          key: ffmpeg-mac-${{ hashFiles('scripts/build-ffmpeg.sh') }}
       - name: Tests
         run: swift test
       - name: Build the app
@@ -23,17 +27,40 @@ jobs:
           test -f "build/Nexonic Download Manager.app/Contents/Resources/Extension/manifest.json"
           test -f "build/Nexonic Download Manager.app/Contents/Resources/Firefox Add-on.xpi"
           "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host" help | grep -q "ndm batch"
+          "build/Nexonic Download Manager.app/Contents/MacOS/ffmpeg" -hide_banner -muxers | grep -q " mp4 "
+          lipo -archs "build/Nexonic Download Manager.app/Contents/MacOS/ffmpeg"
           plutil -lint "build/Nexonic Download Manager.app/Contents/Info.plist"
           python3 scripts/host-ping.py "build/Nexonic Download Manager.app/Contents/MacOS/nexonic-host"
       - uses: actions/upload-artifact@v4
         with:
           name: nexonic-download-manager
           path: build/*.dmg
+  ffmpeg-windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: .ffmpeg-cache/windows
+          key: ffmpeg-windows-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: sudo apt-get install -y -qq mingw-w64 && bash scripts/build-ffmpeg.sh windows .ffmpeg-cache/windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: .ffmpeg-cache/windows
   windows:
+    needs: ffmpeg-windows
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: .ffmpeg-cache/windows
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -42,6 +69,12 @@ jobs:
       - name: Build the app and installer
         run: ./windows/build.ps1
         shell: pwsh
+      - name: Bundled ffmpeg runs
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build\win\ffmpeg.exe)) { throw "ffmpeg.exe missing from the app folder" }
+          $m = & build\win\ffmpeg.exe -hide_banner -muxers 2>&1 | Out-String
+          if ($m -notmatch " mp4 ") { throw "ffmpeg has no mp4 muxer: $m" }
       - name: Helper answers a ping
         shell: pwsh
         run: |

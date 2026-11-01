@@ -66,6 +66,15 @@ public sealed class DownloadManager
         Schedule();
     }
 
+    /// <summary>Sample list for the README screenshots (only used when the app is started with NDM_DEMO=1).</summary>
+    public void LoadDemo(List<DownloadRecord> records, DownloadQueue extra)
+    {
+        Rows.Clear();
+        foreach (var r in records.AsEnumerable().Reverse()) Rows.Add(new Row(r, QueueName));
+        Queues.Add(extra);
+        Schedule();
+    }
+
     // ---- adding ----
 
     public int AddLinks(string text, AddOptions? o = null)
