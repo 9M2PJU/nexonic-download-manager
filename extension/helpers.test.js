@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cookieHeader, extensionOf, shouldTakeOver } from "./helpers.js";
+import { cookieHeader, extensionOf, isWebLink, shouldTakeOver } from "./helpers.js";
+
+test("only web links go to the app", () => {
+  assert.equal(isWebLink("https://example.com/a.zip"), true);
+  assert.equal(isWebLink("HTTP://example.com/a"), true);
+  for (const bad of ["file:///etc/passwd", "javascript:alert(1)", "data:text/html,x", "chrome://settings", "ftp://e.com/a", "https://", "not a url"])
+    assert.equal(isWebLink(bad), false, bad);
+});
 
 test("takes over normal web downloads only", () => {
   const big = { url: "https://example.com/a.zip", filename: "/Users/x/Downloads/a.zip", totalBytes: 50e6 };

@@ -1,5 +1,5 @@
 import {
-  DEFAULTS, HOST, addMedia, cookieHeader, header, isMedia, isStreamPlaylist, isVideoSite, nameFromUrl, shouldTakeOver, sortMedia,
+  DEFAULTS, HOST, addMedia, cookieHeader, header, isMedia, isStreamPlaylist, isVideoSite, isWebLink, nameFromUrl, shouldTakeOver, sortMedia,
   summarizePlaylist, titleToName,
 } from "./helpers.js";
 
@@ -8,6 +8,7 @@ async function settings() {
 }
 
 async function send(url, extra = {}) {
+  if (!isWebLink(url)) return false;  // nothing else is ever sent to the app (or gets cookies looked up)
   let cookies = "";
   try {
     cookies = cookieHeader(await chrome.cookies.getAll({ url }));
@@ -191,7 +192,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // ---- Messages from the popup and the page button ----
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-  const tabId = msg.tabId ?? (sender.tab && sender.tab.id);
+  // A page's own script only ever speaks for its own tab; only the popup (no sender.tab) may name a tab.
+  const tabId = sender.tab ? sender.tab.id : msg.tabId;
   const referrer = msg.referrer || (sender.tab && sender.tab.url) || "";
   const run = async () => {
     switch (msg && msg.type) {

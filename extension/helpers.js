@@ -32,6 +32,16 @@ export function shouldTakeOver(item, settings) {
   return true;
 }
 
+/** Only plain web links are handed to the app (never file:, data:, javascript:, chrome: and the like). */
+export function isWebLink(url) {
+  try {
+    const u = new URL(url);
+    return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname;
+  } catch (_) {
+    return false;
+  }
+}
+
 export function cookieHeader(cookies) {
   return (cookies || []).map((c) => `${c.name}=${c.value}`).join("; ");
 }
