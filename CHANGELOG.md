@@ -1,4 +1,4 @@
-## Unreleased (production hardening, not released yet)
+## 0.6.2
 
 - **Security:** cookies and logins are only ever sent to the download's own server (not to video pieces on other
   hosts, not after a redirect to another host or from https to http). Logins answer only the original server.
@@ -13,6 +13,9 @@
 - **Saved lists:** written safely on Windows; a damaged list is kept as a copy instead of being replaced.
 - **Checksums:** a mismatch is now shown as an error on the download.
 - **Extension:** only web links are handed to the app; a page can only ask about its own tab.
+- **Keychain problems are explained:** if the Keychain is locked or access is denied, the app says so (with Try
+  Again) instead of writing passwords to a file.
+- **Time left** no longer jumps back after 24 hours or shows nonsense for huge files (Windows could crash on it).
 - **Releases:** tests and a full check of every bundled tool run before anything is published; downloaded tools are
   verified by checksum; full license texts for ffmpeg and QuickJS are included.
 

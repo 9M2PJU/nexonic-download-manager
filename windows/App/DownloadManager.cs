@@ -507,8 +507,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
     public string Size => Record.Size is long s ? Bytes(s) : "–";
     public double Percent => Record.Progress * 100;
     public string Speed => Record.IsActive && SpeedBytes > 0 ? Bytes((long)SpeedBytes) + "/s" : "";
-    public string TimeLeft => Record.IsActive && SpeedBytes > 0 && Record.Size is long s
-        ? TimeSpan.FromSeconds((s - Record.Received) / SpeedBytes).ToString(@"hh\:mm\:ss") : "";
+    public string TimeLeft => Record.IsActive ? TimeLeftText.Of(Record.Size, Record.Received, SpeedBytes) : "";
     /// <summary>Video sites and streams take a few seconds to look up the best quality before the first byte arrives.</summary>
     public bool PreparingVideo => Record.IsActive && (Record.SiteVideo == true || Record.IsStream == true) && Record.Received == 0;
     public string Status => PreparingVideo ? "Preparing video…" : Record.Status switch

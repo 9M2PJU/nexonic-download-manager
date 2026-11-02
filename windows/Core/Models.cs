@@ -190,3 +190,18 @@ public static class AppPaths
     public static string Settings => Path.Combine(Support, "settings.json");
     public static string Queues => Path.Combine(Support, "queues.json");
 }
+
+/// <summary>Time left as shown in the list and the progress window.</summary>
+public static class TimeLeftText
+{
+    /// <summary>"1:05:09", "12:30" or "" (unknown); days are not dropped and absurd values never crash.</summary>
+    public static string Of(long? size, long received, double bytesPerSecond)
+    {
+        if (size is not long s || bytesPerSecond <= 0 || s <= 0) return "";
+        var seconds = Math.Max(0, (s - received) / bytesPerSecond);
+        if (double.IsNaN(seconds) || seconds > 99 * 24 * 3600) return seconds > 0 ? "more than 99 days" : "";
+        var t = (long)Math.Ceiling(seconds);
+        var h = t / 3600;
+        return h > 0 ? $"{h}:{t / 60 % 60:00}:{t % 60:00}" : $"{t / 60}:{t % 60:00}";
+    }
+}

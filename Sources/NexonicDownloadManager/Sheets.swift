@@ -202,13 +202,13 @@ struct SchedulerSheet: View {
                     }
                     .frame(width: 180, height: 300)
                     HStack {
-                        Button { selected = manager.newQueue() } label: { Image(systemName: "plus") }.help("New queue")
+                        Button { selected = manager.newQueue() } label: { Image(systemName: "plus") }.help("New queue").accessibilityLabel("New queue")
                         Button {
                             let old = selected
                             selected = DownloadQueue.mainID
                             manager.deleteQueue(old)
                         } label: { Image(systemName: "minus") }
-                            .disabled(selected == DownloadQueue.mainID).help("Delete queue")
+                            .disabled(selected == DownloadQueue.mainID).help("Delete queue").accessibilityLabel("Delete queue")
                     }
                 }
                 if let i = index { editor(i) }

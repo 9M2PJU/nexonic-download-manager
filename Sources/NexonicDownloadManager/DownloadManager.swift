@@ -518,7 +518,8 @@ final class DownloadManager: ObservableObject {
 
     func eta(_ item: DownloadRecord) -> String {
         guard let size = item.size, let speed = speeds[item.id], speed > 0 else { return "" }
-        let seconds = Double(size - item.received) / speed
+        let seconds = max(0, Double(size - item.received) / speed)  // never negative when a size was only an estimate
+        if seconds > 99 * 24 * 3600 { return "more than 99 days" }
         let f = DateComponentsFormatter()
         f.allowedUnits = seconds > 3600 ? [.hour, .minute] : [.minute, .second]
         f.unitsStyle = .abbreviated

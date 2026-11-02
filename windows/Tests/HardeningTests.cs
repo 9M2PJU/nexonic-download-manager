@@ -316,3 +316,17 @@ public class UpdateTests
         File.Delete(file);
     }
 }
+
+public class TimeLeftTests
+{
+    [Fact]
+    public void TimeLeftNeverWrapsOrCrashes()
+    {
+        Assert.Equal("1:40", TimeLeftText.Of(1000, 0, 10));
+        Assert.Equal("30:00:00", TimeLeftText.Of(108_000, 0, 1));  // 30 hours, not "06:00:00"
+        Assert.Equal("0:00", TimeLeftText.Of(100, 150, 10));  // more received than expected: not negative
+        Assert.Equal("more than 99 days", TimeLeftText.Of(long.MaxValue, 0, 1));  // used to throw
+        Assert.Equal("", TimeLeftText.Of(null, 0, 10));
+        Assert.Equal("", TimeLeftText.Of(1000, 0, 0));
+    }
+}
