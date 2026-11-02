@@ -340,6 +340,7 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             if let expected = record.checksum, let (algorithm, hex) = Checksum.parse(expected) {
                 let actual = (try? Checksum.compute(algorithm, file: target)) ?? ""
                 record.checksumResult = actual == hex ? "\(algorithm.rawValue) matches" : "\(algorithm.rawValue) does not match (got \(actual))"
+                if actual != hex { record.error = "The checksum does not match: the file may be damaged or not the one expected" }
             }
             record.savedPath = target.path
             record.fileName = target.lastPathComponent

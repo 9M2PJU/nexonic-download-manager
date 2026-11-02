@@ -265,7 +265,12 @@ public sealed class Transfer : IDownloader
             }
         }
         try { Directory.Delete(PartsFolder, true); } catch { }
-        if (Checksum.Parse(Record.Checksum) != null) Record.ChecksumResult = Checksum.Verify(Record.Checksum!, target);
+        if (Checksum.Parse(Record.Checksum) != null)
+        {
+            Record.ChecksumResult = Checksum.Verify(Record.Checksum!, target);
+            if (Record.ChecksumResult.Contains("does not match"))
+                Record.Error = "The checksum does not match: the file may be damaged or not the one expected";
+        }
         Record.SavedPath = target;
         Record.FileName = Path.GetFileName(target);
         Record.Status = DownloadStatus.Finished;
