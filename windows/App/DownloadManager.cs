@@ -57,6 +57,9 @@ public sealed class DownloadManager
             if (r.IsActive) r.Status = DownloadStatus.Queued;
             Rows.Add(new Row(r, QueueName));
         }
+        // Lists and settings saved by 0.6.1 hold cookies and passwords in plain text: encrypt them now.
+        if (File.Exists(AppPaths.Settings)) Write(AppPaths.Settings, Settings);
+        if (File.Exists(AppPaths.Downloads)) Save();
         limiter.SetLimit(Settings.SpeedLimitKBps * 1024);
         timer.Tick += (_, _) => Tick();
         timer.Start();
@@ -384,7 +387,7 @@ public sealed class DownloadManager
             {
                 if (slots-- <= 0) break;
                 IDownloader t = row.Record.SiteVideo == true
-                    ? new SiteVideoTransfer(row.Record, Settings.SortIntoCategoryFolders, Settings.SpeedLimitKBps)
+                    ? new SiteVideoTransfer(row.Record, Settings.SortIntoCategoryFolders, Settings.SpeedLimitKBps, Settings.Proxy)
                     : row.Record.IsStream == true
                     ? new StreamTransfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy)
                     : new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy);
@@ -475,20 +478,14 @@ public sealed class DownloadManager
 
     public void Save() => Write(AppPaths.Downloads, Rows.Select(r => r.Record).ToList());
 
+    /// <summary>Saves atomically, with cookies and passwords encrypted for this Windows user (see Secrets).</summary>
     static void Write<T>(string path, T value)
     {
-        try
-        {
-            Directory.CreateDirectory(AppPaths.Support);
-            File.WriteAllText(path, JsonSerializer.Serialize(value));
-        }
+        try { SafeFile.Write(path, Secrets.SerializeSealed(value)); }
         catch { }
     }
 
-    static T? Load<T>(string path)
-    {
-        try { return File.Exists(path) ? JsonSerializer.Deserialize<T>(File.ReadAllText(path)) : default; } catch { return default; }
-    }
+    static T? Load<T>(string path) => SafeFile.Load(path, Secrets.DeserializeOpened<T>);
 }
 
 /// <summary>One row in the table; raises change notifications for the bound columns.</summary>
@@ -510,8 +507,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
     public string Size => Record.Size is long s ? Bytes(s) : "–";
     public double Percent => Record.Progress * 100;
     public string Speed => Record.IsActive && SpeedBytes > 0 ? Bytes((long)SpeedBytes) + "/s" : "";
-    public string TimeLeft => Record.IsActive && SpeedBytes > 0 && Record.Size is long s
-        ? TimeSpan.FromSeconds((s - Record.Received) / SpeedBytes).ToString(@"hh\:mm\:ss") : "";
+    public string TimeLeft => Record.IsActive ? TimeLeftText.Of(Record.Size, Record.Received, SpeedBytes) : "";
     /// <summary>Video sites and streams take a few seconds to look up the best quality before the first byte arrives.</summary>
     public bool PreparingVideo => Record.IsActive && (Record.SiteVideo == true || Record.IsStream == true) && Record.Received == 0;
     public string Status => PreparingVideo ? "Preparing video…" : Record.Status switch

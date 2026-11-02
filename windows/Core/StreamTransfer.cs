@@ -43,7 +43,7 @@ public sealed class StreamTransfer : IDownloader
         this.sortIntoCategories = sortIntoCategories;
         OwnLimiter.SetLimit((record.SpeedLimitKBps ?? 0) * 1024);
         var handler = Network.Handler(proxy ?? new ProxySettings());
-        handler.AllowAutoRedirect = true; // the pieces carry no cookies across hosts (added per request below)
+        // Redirects are followed by hand (Network.SendAsync) so cookies and the login never reach another host.
         http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) };
     }
 
@@ -89,17 +89,19 @@ public sealed class StreamTransfer : IDownloader
             ct.ThrowIfCancellationRequested();
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                if (!string.IsNullOrEmpty(Record.Referrer)) req.Headers.TryAddWithoutValidation("Referer", Record.Referrer);
-                if (!string.IsNullOrEmpty(Record.UserAgent)) req.Headers.TryAddWithoutValidation("User-Agent", Record.UserAgent);
-                if (!string.IsNullOrEmpty(Record.Cookies) && string.Equals(url.Host, origin.Host, StringComparison.OrdinalIgnoreCase))
-                    req.Headers.TryAddWithoutValidation("Cookie", Record.Cookies);
-                if (!string.IsNullOrEmpty(Record.Username))
-                    req.Headers.Authorization = new AuthenticationHeaderValue("Basic",
-                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{Record.Username}:{Record.Password}")));
-                using var res = await http.SendAsync(req, ct);
+                using var res = await Network.SendAsync(http, url, u =>
+                {
+                    var req = new HttpRequestMessage(HttpMethod.Get, u);
+                    if (!string.IsNullOrEmpty(Record.Referrer)) req.Headers.TryAddWithoutValidation("Referer", Record.Referrer);
+                    if (!string.IsNullOrEmpty(Record.UserAgent)) req.Headers.TryAddWithoutValidation("User-Agent", Record.UserAgent);
+                    // Pieces often live on other hosts (CDNs): cookies and the login only go to the playlist's own server.
+                    Network.AddPrivateHeaders(req, u, origin, Record.Cookies, Record.Username, Record.Password);
+                    return req;
+                }, HttpCompletionOption.ResponseContentRead, ct);
                 if (!res.IsSuccessStatusCode) throw new HttpFailure((int)res.StatusCode);
-                return await res.Content.ReadAsByteArrayAsync(ct);
+                var data = await res.Content.ReadAsByteArrayAsync(ct);
+                if (data.Length == 0) throw new IOException("An empty piece was received");
+                return data;
             }
             catch (Exception) when (!ct.IsCancellationRequested && attempt < 6)
             {

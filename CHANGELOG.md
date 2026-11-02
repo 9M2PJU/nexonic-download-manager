@@ -1,3 +1,24 @@
+## 0.6.2
+
+- **Security:** cookies and logins are only ever sent to the download's own server (not to video pieces on other
+  hosts, not after a redirect to another host or from https to http). Logins answer only the original server.
+- **Secrets at rest:** cookies, download passwords and the proxy password are kept in the macOS Keychain or
+  encrypted for your Windows user (DPAPI). Lists saved by older versions are moved over on first launch.
+- **Video engine:** uses the proxy from Settings; cookies, logins and the proxy are no longer visible in the list of
+  running programs.
+- **Updates:** only this app's own release file is installed, and only if it matches the SHA-256 GitHub publishes;
+  on Mac the new app's identity and signature are checked first.
+- **Reliable resume:** a file that changed on the server is downloaded again from the start instead of being mixed
+  with the old parts; every part the server sends is checked; parts that make progress get fresh retries.
+- **Saved lists:** written safely on Windows; a damaged list is kept as a copy instead of being replaced.
+- **Checksums:** a mismatch is now shown as an error on the download.
+- **Extension:** only web links are handed to the app; a page can only ask about its own tab.
+- **Keychain problems are explained:** if the Keychain is locked or access is denied, the app says so (with Try
+  Again) instead of writing passwords to a file.
+- **Time left** no longer jumps back after 24 hours or shows nonsense for huge files (Windows could crash on it).
+- **Releases:** tests and a full check of every bundled tool run before anything is published; downloaded tools are
+  verified by checksum; full license texts for ffmpeg and QuickJS are included.
+
 ## 0.6.1
 
 - Fix: the Windows build of 0.6.0 (same features as 0.6.0 below).

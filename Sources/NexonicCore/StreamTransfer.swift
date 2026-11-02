@@ -40,7 +40,8 @@ public final class StreamTransfer: Downloader, @unchecked Sendable {
         config.httpCookieAcceptPolicy = .never
         config.timeoutIntervalForRequest = 30
         config.httpMaximumConnectionsPerHost = 16
-        session = URLSession(configuration: config)
+        // Redirects to another host lose the cookies and the login (see RedirectGuard).
+        session = URLSession(configuration: config, delegate: RedirectGuard(origin: record.url), delegateQueue: nil)
         ownLimiter.setLimit(bytesPerSecond: (record.speedLimitKBps ?? 0) * 1024)
     }
 
@@ -80,7 +81,9 @@ public final class StreamTransfer: Downloader, @unchecked Sendable {
         var req = URLRequest(url: url)
         if let ref = r.referrer, !ref.isEmpty { req.setValue(ref, forHTTPHeaderField: "Referer") }
         if let ua = r.userAgent, !ua.isEmpty { req.setValue(ua, forHTTPHeaderField: "User-Agent") }
-        if let c = r.cookies, !c.isEmpty, url.host?.lowercased() == r.url.host?.lowercased() { req.setValue(c, forHTTPHeaderField: "Cookie") }
+        // Pieces often live on other hosts (CDNs): cookies and the login only go to the playlist's own server.
+        guard Network.sameSite(url, r.url) else { return req }
+        if let c = r.cookies, !c.isEmpty { req.setValue(c, forHTTPHeaderField: "Cookie") }
         if let u = r.username, !u.isEmpty {
             let token = Data("\(u):\(r.password ?? "")".utf8).base64EncodedString()
             req.setValue("Basic \(token)", forHTTPHeaderField: "Authorization")
@@ -99,6 +102,7 @@ public final class StreamTransfer: Downloader, @unchecked Sendable {
                     throw HTTPError(code: code)
                 }
                 guard (200..<300).contains(code) else { throw HTTPError(code: code) }
+                guard !data.isEmpty else { throw URLError(.zeroByteResource) }  // retried like any other failure
                 return data
             } catch is CancellationError {
                 throw CancellationError()
@@ -255,5 +259,21 @@ public final class StreamTransfer: Downloader, @unchecked Sendable {
             $0.finished = Date()
         }
         notify(force: true)
+    }
+}
+
+/// Removes cookies and the login from a redirect that leaves the original server (or steps down to plain http).
+final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let origin: URL
+    init(origin: URL) { self.origin = origin }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        var next = request
+        if let url = next.url, !Network.sameSite(url, origin) {
+            next.setValue(nil, forHTTPHeaderField: "Cookie")
+            next.setValue(nil, forHTTPHeaderField: "Authorization")
+        }
+        completionHandler(next)
     }
 }

@@ -143,6 +143,54 @@ public enum SiteVideo {
     /// Video details older than this are looked up again (the links inside them expire).
     public static let infoMaxAge: TimeInterval = 2 * 3600
 
+    /// Moves the cookie header, the login and the proxy out of the command line (where any program on the Mac can read
+    /// them) into a private options file that yt-dlp loads with --config-locations. Returns the remaining arguments and
+    /// the file's text ("" when there is nothing private).
+    public static func privateOptions(_ args: [String], proxy: String?) -> (args: [String], config: String) {
+        var rest: [String] = []
+        var config: [String] = []
+        var i = 0
+        while i < args.count {
+            let a = args[i]
+            if a == "--" { rest += args[i...]; break }
+            if i + 1 < args.count,
+               a == "--username" || a == "--password" || (a == "--add-header" && args[i + 1].lowercased().hasPrefix("cookie:")) {
+                config.append("\(a) \(quote(args[i + 1]))")
+                i += 2
+                continue
+            }
+            rest.append(a)
+            i += 1
+        }
+        if let proxy { config.append("--proxy \(quote(proxy))") }
+        return (rest, config.isEmpty ? "" : config.joined(separator: "\n") + "\n")
+    }
+
+    /// Quoting for yt-dlp option files (read like a POSIX shell): 'text' with ' written as '"'"'.
+    public static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
+
+    /// The proxy for yt-dlp: "" = connect directly, nil = system settings.
+    public static func proxyURL(_ p: ProxySettings) -> String? {
+        let host = p.host.trimmingCharacters(in: .whitespaces)
+        if p.mode == .none { return "" }
+        guard p.mode == .http || p.mode == .socks, !host.isEmpty else { return nil }
+        func esc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s }
+        let login = p.username.isEmpty ? "" : "\(esc(p.username)):\(esc(p.password))@"
+        return "\(p.mode == .socks ? "socks5" : "http")://\(login)\(host):\(p.port)"
+    }
+
+    /// The arguments to run, with the private options in a file readable only by this user (delete it when done).
+    /// Throws when that file can't be written: never falls back to secrets on the command line.
+    public static func prepare(_ args: [String], proxy: ProxySettings?) throws -> (args: [String], configFile: URL?) {
+        let (rest, config) = privateOptions(args, proxy: proxy.flatMap(proxyURL))
+        guard !config.isEmpty else { return (rest, nil) }
+        try FileManager.default.createDirectory(at: AppPaths.parts, withIntermediateDirectories: true)
+        let file = AppPaths.parts.appendingPathComponent("yt-dlp-\(UUID().uuidString).conf")
+        guard FileManager.default.createFile(atPath: file.path, contents: Data(config.utf8), attributes: [.posixPermissions: 0o600])
+        else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: file.path]) }
+        return (["--config-locations", file.path] + rest, file)
+    }
+
     /// The command for one video. `folder` gets the finished file, `temp` the partial one (so it can resume).
     public static func arguments(url: URL, folder: String, temp: String, ffmpeg: String?, quickJS: String?, audioOnly: Bool,
                                  referrer: String?, cookies: String?, userAgent: String?, username: String?, password: String?,
@@ -237,8 +285,11 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
 
     private var temp: URL { AppPaths.parts.appendingPathComponent(rec.id.uuidString, isDirectory: true) }
 
-    public init(record: DownloadRecord, sortIntoCategories: Bool = false, speedLimitKBps: Int = 0) {
+    private let proxy: ProxySettings?
+
+    public init(record: DownloadRecord, sortIntoCategories: Bool = false, speedLimitKBps: Int = 0, proxy: ProxySettings? = nil) {
         rec = record
+        self.proxy = proxy
         self.sortIntoCategories = sortIntoCategories
         let own = record.speedLimitKBps ?? 0
         self.speedLimitKBps = [own, speedLimitKBps].filter { $0 > 0 }.min() ?? 0
@@ -287,10 +338,17 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
         try? FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         let p = Process()
         p.executableURL = SiteVideoTools.ytdlp
-        p.arguments = SiteVideo.arguments(url: r.url, folder: folder.path, temp: temp.path, ffmpeg: FFmpeg.path,
-                                          quickJS: SiteVideoTools.quickJS, audioOnly: r.audioOnly == true, referrer: r.referrer,
-                                          cookies: r.cookies, userAgent: r.userAgent, username: r.username, password: r.password,
-                                          speedLimitKBps: speedLimitKBps, infoJSON: r.infoJSON)
+        let prepared: (args: [String], configFile: URL?)
+        do {
+            prepared = try SiteVideo.prepare(SiteVideo.arguments(url: r.url, folder: folder.path, temp: temp.path, ffmpeg: FFmpeg.path,
+                                              quickJS: SiteVideoTools.quickJS, audioOnly: r.audioOnly == true, referrer: r.referrer,
+                                              cookies: r.cookies, userAgent: r.userAgent, username: r.username, password: r.password,
+                                              speedLimitKBps: speedLimitKBps, infoJSON: r.infoJSON), proxy: proxy)
+        } catch {
+            return fail("The video engine's private settings could not be written: \(error.localizedDescription)")
+        }
+        defer { if let f = prepared.configFile { try? FileManager.default.removeItem(at: f) } }
+        p.arguments = prepared.args
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
         p.standardError = err

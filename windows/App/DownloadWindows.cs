@@ -151,7 +151,7 @@ public static class DownloadWindows
         w.Show();
         w.Activate();
 
-        if (site) _ = LookUpVideoAsync(job, size, name, p => infoPath = p);
+        if (site) _ = LookUpVideoAsync(job, size, name, p => infoPath = p, m.Settings.Proxy);
         else if (job.Size is null && job.Stream != true) _ = ProbeAsync(m, job, size, name);
     }
 
@@ -159,7 +159,7 @@ public static class DownloadWindows
     /// Looks the video up while the window is open (title, size, best quality). The details are saved and reused, so the
     /// download starts at once instead of looking the video up again.
     /// </summary>
-    static async Task LookUpVideoAsync(DownloadJob job, TextBlock size, TextBox name, Action<string> found)
+    static async Task LookUpVideoAsync(DownloadJob job, TextBlock size, TextBox name, Action<string> found, ProxySettings proxy)
     {
         size.Text = "Finding the best quality…";
         var path = Path.Combine(AppPaths.Parts, $"info-{Guid.NewGuid():N}.json");
@@ -176,8 +176,10 @@ public static class DownloadWindows
                     StandardOutputEncoding = System.Text.Encoding.UTF8,
                 };
                 psi.Environment["PYTHONIOENCODING"] = "utf-8";
-                foreach (var a in SiteVideo.InfoArguments(job.Url, SiteVideoTools.QuickJs, false, job.Referrer, job.Cookies, job.UserAgent, null, null))
-                    psi.ArgumentList.Add(a);
+                var (args, configFile) = SiteVideo.Prepare(
+                    SiteVideo.InfoArguments(job.Url, SiteVideoTools.QuickJs, false, job.Referrer, job.Cookies, job.UserAgent, null, null), proxy);
+                foreach (var a in args) psi.ArgumentList.Add(a);
+                using var cleanup = new ConfigCleanup(configFile);
                 using var p = Process.Start(psi)!;
                 p.ErrorDataReceived += (_, _) => { };
                 p.BeginErrorReadLine();

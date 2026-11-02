@@ -36,7 +36,8 @@ public sealed class Transfer : IDownloader
         var handler = Network.Handler(proxy ?? new ProxySettings());
         if (!string.IsNullOrEmpty(record.Username))
         {
-            handler.Credentials = new NetworkCredential(record.Username, record.Password ?? "");
+            // The login is only ever offered to the download's own server, never to a host it redirects to.
+            handler.Credentials = Network.CredentialsFor(origin, new NetworkCredential(record.Username, record.Password ?? ""));
             handler.PreAuthenticate = true;
         }
         http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
@@ -77,37 +78,31 @@ public sealed class Transfer : IDownloader
         catch (Exception) when (ct.IsCancellationRequested) { /* paused or removed */ }
         catch (Exception e)
         {
+            if (e is FileChangedException)
+            {
+                // Never mix two versions of a file: the next Resume starts from the beginning.
+                lock (Record.Segments) Record.Segments = new();
+                Record.Validator = null;
+                try { Directory.Delete(PartsFolder, true); } catch { }
+            }
             Record.Status = DownloadStatus.Failed;
             Record.Error = e.Message;
             Notify(true);
         }
     }
 
-    async Task<HttpResponseMessage> SendAsync(string? range, CancellationToken ct)
-    {
-        var url = origin;
-        for (var hop = 0; hop < 10; hop++)
+    Task<HttpResponseMessage> SendAsync(string? range, CancellationToken ct, string? ifRange = null) =>
+        Network.SendAsync(http, origin, url =>
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("identity"));
             if (range != null) req.Headers.TryAddWithoutValidation("Range", range);
+            if (range != null && ifRange != null) req.Headers.TryAddWithoutValidation("If-Range", ifRange);
             if (!string.IsNullOrEmpty(Record.Referrer)) req.Headers.TryAddWithoutValidation("Referer", Record.Referrer);
             if (!string.IsNullOrEmpty(Record.UserAgent)) req.Headers.TryAddWithoutValidation("User-Agent", Record.UserAgent);
-            if (!string.IsNullOrEmpty(Record.Cookies) && string.Equals(url.Host, origin.Host, StringComparison.OrdinalIgnoreCase))
-                req.Headers.TryAddWithoutValidation("Cookie", Record.Cookies);
-            var res = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-            var code = (int)res.StatusCode;
-            if (code is >= 300 and < 400 && res.Headers.Location is { } loc)
-            {
-                url = loc.IsAbsoluteUri ? loc : new Uri(url, loc);
-                res.Dispose();
-                if (url.Scheme != "http" && url.Scheme != "https") throw new InvalidOperationException("Redirect to an unsupported address");
-                continue;
-            }
-            return res;
-        }
-        throw new InvalidOperationException("Too many redirects");
-    }
+            Network.AddPrivateHeaders(req, url, origin, Record.Cookies, null, null);
+            return req;
+        }, HttpCompletionOption.ResponseHeadersRead, ct);
 
     async Task ProbeAsync(CancellationToken ct)
     {
@@ -127,10 +122,13 @@ public sealed class Transfer : IDownloader
         }
         else if (res.Content.Headers.ContentLength is > 0 and var len) size = len;
 
+        var validator = Network.Validator(res);
         var cd = res.Content.Headers.ContentDisposition?.ToString();
         if (FileNames.FromContentDisposition(cd) is { } name && Record.FileName == FileNames.FromUrl(Record.Url)) Record.FileName = name;
 
-        var canResume = Record.Segments.Count > 0 && ranges && Record.AcceptsRanges && size == Record.Size;
+        // Resume only into the same file: same size and, when the server names its version, the same ETag/Last-Modified.
+        var canResume = Record.Segments.Count > 0 && ranges && Record.AcceptsRanges && size == Record.Size
+                        && Network.SameVersion(Record.Validator, validator);
         Directory.CreateDirectory(PartsFolder);
         if (canResume)
         {
@@ -148,6 +146,7 @@ public sealed class Transfer : IDownloader
             Directory.CreateDirectory(PartsFolder);
             Record.Size = size;
             Record.AcceptsRanges = ranges;
+            Record.Validator = validator;
             lock (Record.Segments)
             {
                 Record.Segments = ranges
@@ -157,8 +156,11 @@ public sealed class Transfer : IDownloader
         }
     }
 
-    async Task DownloadAllAsync(CancellationToken ct)
+    async Task DownloadAllAsync(CancellationToken outer)
     {
+        // One failing part stops its siblings, and they are awaited before anything is cleaned up or reported.
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(outer);
+        var ct = stop.Token;
         var running = new List<Task>();
         List<Segment> pending;
         lock (Record.Segments) pending = Record.Segments.Where(s => !s.IsComplete).ToList();
@@ -167,6 +169,11 @@ public sealed class Transfer : IDownloader
         {
             var done = await Task.WhenAny(running);
             running.Remove(done);
+            if (done.IsFaulted || (done.IsCanceled && !outer.IsCancellationRequested))
+            {
+                stop.Cancel();
+                try { await Task.WhenAll(running); } catch { /* stopped on purpose */ }
+            }
             await done; // rethrows a final failure
             if (!Record.AcceptsRanges || running.Count >= connections) continue;
             Segment? added = null;
@@ -187,16 +194,24 @@ public sealed class Transfer : IDownloader
     async Task SegmentAsync(Segment seg, CancellationToken ct)
     {
         var buffer = new byte[64 * 1024];
+        long writtenAtStart = -1;
         for (var attempt = 1; ; attempt++)
         {
             try
             {
+                if (Record.AcceptsRanges && writtenAtStart >= 0 && seg.Written > writtenAtStart) attempt = 1; // kept progress: fresh retries
+                writtenAtStart = seg.Written;
                 if (!Record.AcceptsRanges) seg.Written = 0;
                 string? range = null;
-                if (Record.AcceptsRanges) range = seg.End >= 0 ? $"bytes={seg.Start + seg.Written}-{seg.End}" : $"bytes={seg.Start + seg.Written}-";
-                using var res = await SendAsync(range, ct);
+                var from = seg.Start + seg.Written;
+                if (Record.AcceptsRanges) range = seg.End >= 0 ? $"bytes={from}-{seg.End}" : $"bytes={from}-";
+                using var res = await SendAsync(range, ct, Network.IfRange(Record.Validator));
+                if (Record.AcceptsRanges && res.StatusCode == HttpStatusCode.OK && Network.IfRange(Record.Validator) != null)
+                    throw new FileChangedException();
                 var ok = res.StatusCode == HttpStatusCode.PartialContent || (res.StatusCode == HttpStatusCode.OK && !Record.AcceptsRanges);
                 if (!ok) throw new HttpRequestException($"HTTP {(int)res.StatusCode}");
+                if (res.StatusCode == HttpStatusCode.PartialContent && !Network.RangeMatches(res.Content.Headers.ContentRange, from, Record.Size))
+                    throw new IOException("The server sent a different part of the file than asked for");
                 await using var body = await res.Content.ReadAsStreamAsync(ct);
                 await using var file = new FileStream(PartPath(seg.Id), FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1 << 16, true);
                 file.SetLength(seg.Written);
@@ -226,12 +241,16 @@ public sealed class Transfer : IDownloader
                     if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
                 }
             }
-            catch (Exception) when (!ct.IsCancellationRequested && attempt < 6)
+            catch (Exception e) when (e is not FileChangedException && !ct.IsCancellationRequested
+                                      && (attempt < 6 || (Record.AcceptsRanges && seg.Written > writtenAtStart)))
             {
                 await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt - 1))), ct);
             }
         }
     }
+
+    sealed class FileChangedException() : Exception(
+        "The file changed on the server since this download started. Resume to download the new version from the start");
 
     void Join()
     {
@@ -255,7 +274,12 @@ public sealed class Transfer : IDownloader
             }
         }
         try { Directory.Delete(PartsFolder, true); } catch { }
-        if (Checksum.Parse(Record.Checksum) != null) Record.ChecksumResult = Checksum.Verify(Record.Checksum!, target);
+        if (Checksum.Parse(Record.Checksum) != null)
+        {
+            Record.ChecksumResult = Checksum.Verify(Record.Checksum!, target);
+            if (Record.ChecksumResult.Contains("does not match"))
+                Record.Error = "The checksum does not match: the file may be damaged or not the one expected";
+        }
         Record.SavedPath = target;
         Record.FileName = Path.GetFileName(target);
         Record.Status = DownloadStatus.Finished;
@@ -275,6 +299,74 @@ public sealed class Transfer : IDownloader
 
 public static class Network
 {
+    /// <summary>Same server and no step down from https: cookies and logins may be sent there.</summary>
+    public static bool SameSite(Uri url, Uri origin) =>
+        string.Equals(url.Host, origin.Host, StringComparison.OrdinalIgnoreCase) && url.Port == origin.Port
+        && !(origin.Scheme == Uri.UriSchemeHttps && url.Scheme != Uri.UriSchemeHttps);
+
+    /// <summary>Cookies and a Basic login, only for the download's own server.</summary>
+    public static void AddPrivateHeaders(HttpRequestMessage req, Uri url, Uri origin, string? cookies, string? user, string? password)
+    {
+        if (!SameSite(url, origin)) return;
+        if (!string.IsNullOrEmpty(cookies)) req.Headers.TryAddWithoutValidation("Cookie", cookies);
+        if (!string.IsNullOrEmpty(user))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}")));
+    }
+
+    /// <summary>A login that only answers challenges from the download's own server.</summary>
+    public static ICredentials CredentialsFor(Uri origin, NetworkCredential login)
+    {
+        var cache = new CredentialCache();
+        var prefix = new Uri(origin.GetLeftPart(UriPartial.Authority));
+        foreach (var scheme in new[] { "Basic", "Digest", "NTLM", "Negotiate" }) cache.Add(prefix, scheme, login);
+        return cache;
+    }
+
+    /// <summary>
+    /// Sends a request and follows redirects by hand (at most 10, http/https only). `build` makes the request for each
+    /// address, so private headers are decided per hop and never reach another host.
+    /// </summary>
+    public static async Task<HttpResponseMessage> SendAsync(HttpClient http, Uri start, Func<Uri, HttpRequestMessage> build,
+        HttpCompletionOption option, CancellationToken ct)
+    {
+        var url = start;
+        for (var hop = 0; hop < 10; hop++)
+        {
+            using var req = build(url);
+            var res = await http.SendAsync(req, option, ct);
+            var code = (int)res.StatusCode;
+            if (code is >= 300 and < 400 && res.Headers.Location is { } loc)
+            {
+                url = loc.IsAbsoluteUri ? loc : new Uri(url, loc);
+                res.Dispose();
+                if (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps)
+                    throw new InvalidOperationException("Redirect to an unsupported address");
+                continue;
+            }
+            return res;
+        }
+        throw new InvalidOperationException("Too many redirects");
+    }
+
+    /// <summary>The file's version as the server names it: a strong ETag, else Last-Modified (null if neither).</summary>
+    public static string? Validator(HttpResponseMessage res)
+    {
+        if (res.Headers.ETag is { IsWeak: false } tag) return tag.Tag;
+        if (res.Content.Headers.LastModified is { } lm) return lm.ToString("R");
+        return null;
+    }
+
+    /// <summary>True unless both versions are known and differ (older lists have none: size decides as before).</summary>
+    public static bool SameVersion(string? saved, string? now) => saved == null || now == null || saved == now;
+
+    /// <summary>The If-Range value: the server then answers 200 with the whole file if it changed, never a wrong part.</summary>
+    public static string? IfRange(string? validator) => string.IsNullOrEmpty(validator) ? null : validator;
+
+    /// <summary>A 206 answer must start where we asked and belong to a file of the expected size.</summary>
+    public static bool RangeMatches(ContentRangeHeaderValue? cr, long from, long? size) =>
+        cr is { From: long f } && f == from && (size is not long s || cr.Length is not long total || total == s);
+
     /// <summary>Connection settings with the chosen proxy. Redirects are followed by hand so cookies never leave the original host.</summary>
     public static SocketsHttpHandler Handler(ProxySettings p)
     {

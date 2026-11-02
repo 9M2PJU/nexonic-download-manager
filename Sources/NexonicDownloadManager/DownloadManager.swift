@@ -26,10 +26,20 @@ final class DownloadManager: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             limiter.setLimit(bytesPerSecond: settings.speedLimitKBps * 1024)
-            save(settings, to: AppPaths.settings)
+            saveSettings()
             schedule()
         }
     }
+
+    /// Cookies and passwords are kept in the Keychain (see Secrets); `stored` is what it holds now.
+    private static let vault: SecretStore = KeychainStore()
+    private var vaultReadable = false
+    private var stored: [String: String] = [:]
+    /// Plain-text secrets found in files saved by 0.6.1, kept there (never added to) until the Keychain takes them.
+    private var legacySecrets: [String: String] = [:]
+    /// The download list could not be read: its Keychain entries are kept, not pruned (see SavedFile).
+    private var listDamaged = false
+    private var warnedKeychain = false
 
     private var transfers: [UUID: Downloader] = [:]
     private var recent: [UUID: [Int64]] = [:]  // received bytes at each of the last ticks
@@ -44,8 +54,18 @@ final class DownloadManager: ObservableObject {
 
     init() {
         try? FileManager.default.createDirectory(at: AppPaths.support, withIntermediateDirectories: true)
-        settings = Self.load(AppSettings.self, from: AppPaths.settings) ?? AppSettings()
-        items = Self.load([DownloadRecord].self, from: AppPaths.downloads) ?? []
+        var loadedSettings = Self.load(AppSettings.self, from: AppPaths.settings) ?? AppSettings()
+        let list = SavedFile.read([DownloadRecord].self, from: AppPaths.downloads)
+        var loadedItems = list.value ?? []
+        listDamaged = list.damaged
+        legacySecrets = Secrets.collect(loadedItems, loadedSettings)
+        if let saved = Self.vault.read() {
+            vaultReadable = true
+            stored = saved
+            Secrets.fill(&loadedItems, &loadedSettings, from: saved)
+        }
+        settings = loadedSettings
+        items = loadedItems
         var qs = Self.load([DownloadQueue].self, from: AppPaths.queues) ?? []
         if !qs.contains(where: \.isMain) { qs.insert(.main, at: 0) }
         queues = qs
@@ -57,6 +77,9 @@ final class DownloadManager: ObservableObject {
         if settings.notifications {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
+        // Lists saved by 0.6.1 or older hold cookies and passwords in the file: move them into the Keychain now.
+        persist()
+        saveSettings()
         collectInbox()
         schedule()
         DispatchQueue.global(qos: .utility).async { SiteVideoTools.prepare() }  // keeps the video engine current
@@ -348,7 +371,7 @@ final class DownloadManager: ObservableObject {
                 let t: Downloader
                 if item.siteVideo == true {
                     t = SiteVideoTransfer(record: item, sortIntoCategories: settings.sortIntoCategoryFolders,
-                                          speedLimitKBps: settings.speedLimitKBps)
+                                          speedLimitKBps: settings.speedLimitKBps, proxy: settings.proxy)
                 } else if item.isStream == true {
                     t = StreamTransfer(record: item, connections: settings.connections, limiter: limiter,
                                        sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)
@@ -495,7 +518,8 @@ final class DownloadManager: ObservableObject {
 
     func eta(_ item: DownloadRecord) -> String {
         guard let size = item.size, let speed = speeds[item.id], speed > 0 else { return "" }
-        let seconds = Double(size - item.received) / speed
+        let seconds = max(0, Double(size - item.received) / speed)  // never negative when a size was only an estimate
+        if seconds > 99 * 24 * 3600 { return "more than 99 days" }
         let f = DateComponentsFormatter()
         f.allowedUnits = seconds > 3600 ? [.hour, .minute] : [.minute, .second]
         f.unitsStyle = .abbreviated
@@ -512,7 +536,68 @@ final class DownloadManager: ObservableObject {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
     }
 
-    private func persist() { save(items, to: AppPaths.downloads) }
+    // Secrets never go into the files in plain text. If the Keychain can't take them, the values from 0.6.1 files stay
+    // where they were (until the Keychain works), new ones are kept only while the app runs, and the user is told.
+    private func persist() {
+        var list = Secrets.stripped(items)
+        if !syncSecrets() {
+            var s = AppSettings()
+            Secrets.fill(&list, &s, from: legacySecrets)
+        }
+        save(list, to: AppPaths.downloads)
+    }
+
+    private func saveSettings() {
+        var s = Secrets.stripped(settings)
+        if !syncSecrets() {
+            var none: [DownloadRecord] = []
+            Secrets.fill(&none, &s, from: legacySecrets)
+        }
+        save(s, to: AppPaths.settings)
+    }
+
+    /// Writes the current secrets to the Keychain when they changed. False when the Keychain can't be read or written.
+    private func syncSecrets() -> Bool {
+        guard vaultReadable else { return keychainFailed() }
+        var all = Secrets.collect(items, settings)
+        if listDamaged { all = stored.merging(all) { _, new in new } }  // the unreadable list's secrets stay recoverable
+        if all == stored { legacySecrets = [:]; return true }
+        guard Self.vault.write(all) else { return keychainFailed() }
+        stored = all
+        legacySecrets = [:]  // migrated: the files are written without them from now on
+        return true
+    }
+
+    private func keychainFailed() -> Bool {
+        guard !warnedKeychain else { return false }
+        warnedKeychain = true
+        Task { @MainActor [weak self] in self?.askAboutKeychain() }
+        return false
+    }
+
+    /// Tells the user that passwords and cookies can't be kept safely right now, and lets them try again.
+    private func askAboutKeychain() {
+        let alert = NSAlert()
+        alert.messageText = "Passwords and cookies can't be saved in the Keychain"
+        alert.informativeText = "Nexonic Download Manager keeps download passwords, cookies and the proxy password in "
+            + "your Keychain, never in plain files. The Keychain is locked or access was denied, so new ones are kept "
+            + "only until you quit. Allow access when macOS asks, then choose Try Again."
+        alert.addButton(withTitle: "Try Again")
+        alert.addButton(withTitle: "Later")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        warnedKeychain = false
+        if let saved = Self.vault.read() {
+            vaultReadable = true
+            stored = saved
+            var list = items
+            var s = settings
+            Secrets.fill(&list, &s, from: saved)
+            items = list
+            if s.proxy.password != settings.proxy.password { settings = s }  // saves too
+        }
+        persist()
+        saveSettings()
+    }
 
     private func save<T: Encodable>(_ value: T, to url: URL) {
         guard let data = try? JSONEncoder().encode(value) else { return }
@@ -520,8 +605,5 @@ final class DownloadManager: ObservableObject {
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)  // may hold passwords
     }
 
-    private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
-    }
+    private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? { SavedFile.load(type, from: url) }
 }

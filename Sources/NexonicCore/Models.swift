@@ -75,6 +75,8 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
     // Added in 0.6.0: the picture and sound pieces of a video, and the step after downloading (joining them)
     public var videoParts: [VideoPart]?
     public var videoStep: String?
+    // Added in 0.6.2: the file's ETag or Last-Modified when the download started, so a changed file is never resumed into
+    public var validator: String?
 
     public init(url: URL, folder: URL, fileName: String? = nil, referrer: String? = nil, cookies: String? = nil,
                 userAgent: String? = nil) {

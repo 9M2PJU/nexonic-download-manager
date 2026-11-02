@@ -78,7 +78,9 @@ enum Updater {
     /// Downloads the new app, then a small helper replaces this copy after it quits and opens the new one.
     private static func install(_ release: Updates.Release) {
         let app = Bundle.main.bundleURL
-        guard let zip = release.assets["NexonicDownloadManager-Mac.zip"],
+        let asset = "NexonicDownloadManager-Mac.zip"
+        // Only this app's own release file, and only when GitHub tells us its checksum; otherwise the release page.
+        guard let zip = release.assets[asset], Updates.trustedAsset(zip), let digest = release.digests[asset], digest.count == 64,
               app.pathExtension == "app",
               FileManager.default.isWritableFile(atPath: app.deletingLastPathComponent().path) else {
             AppLinks.open(release.page)  // e.g. opened from the disk image: download it from the release page instead
@@ -91,14 +93,15 @@ enum Updater {
                 let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nexonic-update-\(UUID().uuidString)")
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 let dest = dir.appendingPathComponent("update.zip")
-                if (try? FileManager.default.moveItem(at: temp, to: dest)) != nil { file = dest }
+                if (try? FileManager.default.moveItem(at: temp, to: dest)) != nil, Updates.verify(dest, sha256: digest) { file = dest }
             }
             let downloaded = file
             Task { @MainActor in
                 panel?.close()
                 panel = nil
                 guard let file = downloaded else {
-                    message("The update could not be downloaded", "Try again later, or download it from the release page.")
+                    message("The update could not be downloaded or did not match the published file",
+                            "Nothing was changed. Try again later, or download it from the release page.")
                     return
                 }
                 relaunch(with: file, app: app)
@@ -115,6 +118,9 @@ enum Updater {
         while kill -0 "$pid" 2>/dev/null; do sleep 0.3; done
         if /usr/bin/ditto -x -k "$zip" "$dir/new"; then
           new="$(/bin/ls -d "$dir"/new/*.app 2>/dev/null | /usr/bin/head -1)"
+          # only this app, with an intact signature, replaces this copy
+          id="$(/usr/bin/defaults read "$new/Contents/Info" CFBundleIdentifier 2>/dev/null)"
+          if [ "$id" != "com.nexonic.downloadmanager" ] || ! /usr/bin/codesign --verify --deep --strict "$new" 2>/dev/null; then new=""; fi
           if [ -d "$new" ] && /bin/mv "$app" "$app.old"; then
             if /usr/bin/ditto "$new" "$app"; then /bin/rm -rf "$app.old"; else /bin/rm -rf "$app"; /bin/mv "$app.old" "$app"; fi
           fi

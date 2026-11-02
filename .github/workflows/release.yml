@@ -14,8 +14,28 @@ jobs:
         with:
           path: .ffmpeg-cache/mac
           key: ffmpeg-mac-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: Tests
+        run: swift test
       - name: Build (Apple silicon and Intel)
         run: bash scripts/build-app.sh
+      - name: Check the app before anything is published (every tool present, runs, and is built for both chips)
+        run: |
+          set -euo pipefail
+          A="build/Nexonic Download Manager.app/Contents"
+          for f in MacOS/NexonicDownloadManager MacOS/nexonic-host MacOS/ffmpeg MacOS/ffprobe MacOS/yt-dlp MacOS/qjs; do
+            test -x "$A/$f" || { echo "missing: $f"; exit 1; }
+          done
+          test -f "$A/Resources/Extension/manifest.json"
+          "$A/MacOS/nexonic-host" help | grep -q "ndm batch"
+          "$A/MacOS/ffmpeg" -hide_banner -muxers | grep -q " mp4 "
+          "$A/MacOS/yt-dlp" --version
+          "$A/MacOS/qjs" -e 'console.log("qjs ok")'
+          for f in MacOS/NexonicDownloadManager MacOS/nexonic-host MacOS/ffmpeg; do
+            archs="$(lipo -archs "$A/$f")"; echo "$f: $archs"
+            [[ "$archs" == *x86_64* && "$archs" == *arm64* ]] || { echo "$f is not universal"; exit 1; }
+          done
+          codesign --verify --deep --strict "build/Nexonic Download Manager.app"
+          plutil -lint "$A/Info.plist"
       - name: Sign the Firefox add-on with Mozilla (when the AMO keys are set)
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
@@ -23,7 +43,8 @@ jobs:
         # Firefox only installs signed add-ons. "unlisted" = signed for download from GitHub, not shown in the store.
         run: |
           if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then
-            echo "No AMO keys: the Firefox add-on stays unsigned."; exit 0
+            # Firefox refuses unsigned add-ons: never publish one as if it worked.
+            echo "::error::AMO keys missing: the Firefox add-on would be unsigned. Add AMO_JWT_ISSUER and AMO_JWT_SECRET."; exit 1
           fi
           V="$(cat VERSION)"
           npx --yes web-ext@8 sign --source-dir build/extension-firefox --channel unlisted \
@@ -83,8 +104,22 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Tests
+        run: dotnet test windows/Tests/Tests.csproj
       - run: ./windows/build.ps1
         shell: pwsh
+      - name: Check the app before it is published (every tool present and running)
+        shell: pwsh
+        run: |
+          foreach ($f in "NexonicDownloadManager.exe", "nexonic-host.exe", "ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe") {
+            if (-not (Test-Path "build\win\$f")) { throw "missing from the app folder: $f" }
+          }
+          $m = & build\win\ffmpeg.exe -hide_banner -muxers 2>&1 | Out-String
+          if ($m -notmatch " mp4 ") { throw "ffmpeg has no mp4 muxer" }
+          & build\win\yt-dlp.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "yt-dlp.exe does not run" }
+          $v = (Get-Content VERSION).Trim()
+          if (-not (Test-Path "build\NexonicDownloadManager-Setup-$v.exe")) { throw "the installer was not built" }
       - name: Add the Windows files to the release
         env:
           GH_TOKEN: ${{ github.token }}
