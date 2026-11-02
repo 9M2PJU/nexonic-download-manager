@@ -141,12 +141,15 @@ struct DownloadInfoView: View {
         let args = SiteVideo.infoArguments(url: url, quickJS: SiteVideoTools.quickJS, audioOnly: false, referrer: job.referrer,
                                            cookies: job.cookies, userAgent: job.userAgent, username: nil, password: nil)
         let fromJob = job.fileName != nil
+        let proxy = manager.settings.proxy
         DispatchQueue.global(qos: .userInitiated).async {
             SiteVideoTools.prepare()
             try? FileManager.default.createDirectory(at: AppPaths.parts, withIntermediateDirectories: true)
+            let prepared = SiteVideo.prepare(args, proxy: proxy)
+            defer { if let f = prepared.configFile { try? FileManager.default.removeItem(at: f) } }
             let p = Process()
             p.executableURL = SiteVideoTools.ytdlp
-            p.arguments = args
+            p.arguments = prepared.args
             let out = Pipe()
             p.standardOutput = out
             p.standardError = FileHandle.nullDevice

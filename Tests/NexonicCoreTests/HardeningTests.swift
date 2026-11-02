@@ -82,3 +82,41 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(kept.count, 1)
     }
 }
+
+/// yt-dlp: cookies, logins and the proxy never on the command line; the app's proxy is used.
+final class VideoEngineTests: XCTestCase {
+    func testPrivateOptionsLeaveTheCommandLine() {
+        let args = SiteVideo.arguments(url: URL(string: "https://youtu.be/abc")!, folder: "/out", temp: "/tmp", ffmpeg: nil,
+                                       quickJS: nil, audioOnly: false, referrer: "https://ref", cookies: "sid=a'b",
+                                       userAgent: "UA", username: "me", password: "p w", speedLimitKBps: 0)
+        let (rest, config) = SiteVideo.privateOptions(args, proxy: "http://u:p@proxy:8080")
+        let line = rest.joined(separator: " ")
+        XCTAssertFalse(line.contains("sid=") || line.contains("--password") || line.contains("proxy:8080"))
+        XCTAssertTrue(line.contains("--referer"))
+        XCTAssertEqual(rest.last, "https://youtu.be/abc")
+        XCTAssertTrue(config.contains("--add-header 'Cookie:sid=a'\"'\"'b'"))
+        XCTAssertTrue(config.contains("--password 'p w'"))
+        XCTAssertTrue(config.contains("--proxy 'http://u:p@proxy:8080'"))
+        XCTAssertEqual(SiteVideo.privateOptions(["-J", "--", "u"], proxy: nil).config, "")
+    }
+
+    func testProxyForTheVideoEngine() throws {
+        XCTAssertNil(SiteVideo.proxyURL(ProxySettings()))  // system settings
+        var p = ProxySettings()
+        p.mode = .none
+        XCTAssertEqual(SiteVideo.proxyURL(p), "")
+        p.mode = .socks
+        p.host = "10.0.0.1"
+        p.port = 1080
+        p.username = "a@b"
+        p.password = "p:w"
+        XCTAssertEqual(SiteVideo.proxyURL(p), "socks5://a%40b:p%3Aw@10.0.0.1:1080")
+        let prepared = SiteVideo.prepare(["-J", "--add-header", "Cookie:x=1", "--", "u"], proxy: p)
+        let file = try XCTUnwrap(prepared.configFile)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(prepared.args.first, "--config-locations")
+        let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
+        XCTAssertEqual((attrs[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        XCTAssertTrue(try String(contentsOf: file).contains("Cookie:x=1"))
+    }
+}

@@ -384,7 +384,7 @@ public sealed class DownloadManager
             {
                 if (slots-- <= 0) break;
                 IDownloader t = row.Record.SiteVideo == true
-                    ? new SiteVideoTransfer(row.Record, Settings.SortIntoCategoryFolders, Settings.SpeedLimitKBps)
+                    ? new SiteVideoTransfer(row.Record, Settings.SortIntoCategoryFolders, Settings.SpeedLimitKBps, Settings.Proxy)
                     : row.Record.IsStream == true
                     ? new StreamTransfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy)
                     : new Transfer(row.Record, Settings.Connections, limiter, Settings.SortIntoCategoryFolders, Settings.Proxy);

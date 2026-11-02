@@ -235,3 +235,46 @@ public class StorageTests
         Assert.Single(Directory.GetFiles(dir, "downloads.unreadable-*.json"));  // kept for recovery, not overwritten
     }
 }
+
+/// <summary>yt-dlp: cookies, logins and the proxy never on the command line; the app's proxy is used.</summary>
+public class VideoEngineTests
+{
+    [Fact]
+    public void PrivateOptionsLeaveTheCommandLine()
+    {
+        var args = SiteVideo.Arguments("https://youtu.be/abc", "/out", "/tmp", null, null, false, "https://ref", "sid=a'b",
+            "UA", "me", "p w", 0);
+        var (rest, config) = SiteVideo.Private(args, "http://u:p@proxy:8080");
+        var line = string.Join(" ", rest);
+        Assert.DoesNotContain("sid=", line);
+        Assert.DoesNotContain("--password", line);
+        Assert.DoesNotContain("proxy:8080", line);
+        Assert.Contains("--referer", line);  // not secret: stays
+        Assert.Equal("https://youtu.be/abc", rest[^1]);
+        Assert.Contains("--add-header 'Cookie:sid=a'\"'\"'b'", config);
+        Assert.Contains("--username 'me'", config);
+        Assert.Contains("--password 'p w'", config);
+        Assert.Contains("--proxy 'http://u:p@proxy:8080'", config);
+        Assert.Equal("", SiteVideo.Private(new List<string> { "-J", "--", "u" }, null).Config);
+    }
+
+    [Fact]
+    public void ProxyForTheVideoEngine()
+    {
+        Assert.Null(SiteVideo.ProxyUrl(new ProxySettings()));  // system settings
+        Assert.Equal("", SiteVideo.ProxyUrl(new ProxySettings { Mode = ProxyMode.None }));
+        Assert.Equal("socks5://a%40b:p%3Aw@10.0.0.1:1080",
+            SiteVideo.ProxyUrl(new ProxySettings { Mode = ProxyMode.Socks, Host = "10.0.0.1", Port = 1080, Username = "a@b", Password = "p:w" }));
+        Assert.Equal("http://h:3128", SiteVideo.ProxyUrl(new ProxySettings { Mode = ProxyMode.Http, Host = " h ", Port = 3128 }));
+        var (args, file) = SiteVideo.Prepare(new List<string> { "-J", "--add-header", "Cookie:x=1", "--", "u" },
+            new ProxySettings { Mode = ProxyMode.None });
+        try
+        {
+            Assert.Equal("--config-locations", args[0]);
+            Assert.Contains("Cookie:x=1", File.ReadAllText(file!));
+            Assert.Contains("--proxy ''", File.ReadAllText(file!));
+        }
+        finally { new ConfigCleanup(file).Dispose(); }
+        Assert.False(File.Exists(file));
+    }
+}

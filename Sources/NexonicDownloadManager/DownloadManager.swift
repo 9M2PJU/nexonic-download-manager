@@ -363,7 +363,7 @@ final class DownloadManager: ObservableObject {
                 let t: Downloader
                 if item.siteVideo == true {
                     t = SiteVideoTransfer(record: item, sortIntoCategories: settings.sortIntoCategoryFolders,
-                                          speedLimitKBps: settings.speedLimitKBps)
+                                          speedLimitKBps: settings.speedLimitKBps, proxy: settings.proxy)
                 } else if item.isStream == true {
                     t = StreamTransfer(record: item, connections: settings.connections, limiter: limiter,
                                        sortIntoCategories: settings.sortIntoCategoryFolders, proxy: settings.proxy)

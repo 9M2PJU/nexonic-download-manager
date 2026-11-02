@@ -157,6 +157,64 @@ public static class SiteVideo
         catch { return null; }
     }
 
+    /// <summary>
+    /// Moves the cookie header, the login and the proxy out of the command line (where any program on the computer can
+    /// read them) into a private options file that yt-dlp loads with --config-locations. Returns the remaining arguments
+    /// and the file's text ("" when there is nothing private).
+    /// </summary>
+    public static (List<string> Args, string Config) Private(IReadOnlyList<string> args, string? proxy)
+    {
+        var rest = new List<string>();
+        var config = new List<string>();
+        for (var i = 0; i < args.Count; i++)
+        {
+            var a = args[i];
+            if (a == "--") { rest.AddRange(args.Skip(i)); break; }
+            if (i + 1 < args.Count && (a is "--username" or "--password" || (a == "--add-header" && args[i + 1].StartsWith("Cookie:", StringComparison.OrdinalIgnoreCase))))
+            {
+                config.Add($"{a} {Quote(args[i + 1])}");
+                i++;
+                continue;
+            }
+            rest.Add(a);
+        }
+        if (proxy != null) config.Add($"--proxy {Quote(proxy)}");
+        return (rest, config.Count == 0 ? "" : string.Join("\n", config) + "\n");
+    }
+
+    /// <summary>Quoting for yt-dlp option files (read like a POSIX shell): 'text' with ' written as '"'"'.</summary>
+    public static string Quote(string s) => "'" + s.Replace("'", "'\"'\"'") + "'";
+
+    /// <summary>The proxy for yt-dlp: "" = connect directly, null = system settings (yt-dlp then uses the environment).</summary>
+    public static string? ProxyUrl(ProxySettings p)
+    {
+        var host = p.Host.Trim();
+        if (p.Mode == ProxyMode.None) return "";
+        if (p.Mode is not (ProxyMode.Http or ProxyMode.Socks) || host.Length == 0) return null;
+        var login = p.Username.Length > 0 ? $"{Uri.EscapeDataString(p.Username)}:{Uri.EscapeDataString(p.Password)}@" : "";
+        return $"{(p.Mode == ProxyMode.Socks ? "socks5" : "http")}://{login}{host}:{p.Port}";
+    }
+
+    /// <summary>Writes the private options next to the download's parts (deleted when yt-dlp is done); null if none.</summary>
+    public static string? WriteConfig(string config)
+    {
+        if (config.Length == 0) return null;
+        Directory.CreateDirectory(AppPaths.Parts);
+        var path = Path.Combine(AppPaths.Parts, $"yt-dlp-{Guid.NewGuid():N}.conf");
+        File.WriteAllText(path, config);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        return path;
+    }
+
+    /// <summary>The arguments to run: private options in a file (see Private), the rest on the command line.</summary>
+    public static (List<string> Args, string? ConfigFile) Prepare(List<string> args, ProxySettings? proxy)
+    {
+        var (rest, config) = Private(args, proxy == null ? null : ProxyUrl(proxy));
+        var file = WriteConfig(config);
+        if (file != null) rest.InsertRange(0, new[] { "--config-locations", file });
+        return (rest, file);
+    }
+
     /// <summary>The command for one video. folder gets the finished file, temp the partial one (so it can resume).</summary>
     public static List<string> Arguments(string url, string folder, string temp, string? ffmpeg, string? quickJs, bool audioOnly,
         string? referrer, string? cookies, string? userAgent, string? username, string? password, int speedLimitKBps, string? infoJson = null)
@@ -192,6 +250,15 @@ public static class SiteVideo
             a.Add(url);
         }
         return a;
+    }
+}
+
+/// <summary>Deletes yt-dlp's private options file once the command is done.</summary>
+public sealed class ConfigCleanup(string? path) : IDisposable
+{
+    public void Dispose()
+    {
+        if (path != null) try { File.Delete(path); } catch { }
     }
 }
 
@@ -242,9 +309,12 @@ public sealed class SiteVideoTransfer : IDownloader
 
     string Temp => Path.Combine(AppPaths.Parts, Record.Id.ToString("N"));
 
-    public SiteVideoTransfer(DownloadRecord record, bool sortIntoCategories = false, int speedLimitKBps = 0)
+    readonly ProxySettings? proxy;
+
+    public SiteVideoTransfer(DownloadRecord record, bool sortIntoCategories = false, int speedLimitKBps = 0, ProxySettings? proxy = null)
     {
         Record = record;
+        this.proxy = proxy;
         this.sortIntoCategories = sortIntoCategories;
         this.speedLimitKBps = new[] { record.SpeedLimitKBps ?? 0, speedLimitKBps }.Where(x => x > 0).DefaultIfEmpty(0).Min();
     }
@@ -300,9 +370,16 @@ public sealed class SiteVideoTransfer : IDownloader
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
         };
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
-        foreach (var arg in SiteVideo.Arguments(Record.Url, folder, Temp, FFmpeg.Path, SiteVideoTools.QuickJs, Record.AudioOnly == true,
-                     Record.Referrer, Record.Cookies, Record.UserAgent, Record.Username, Record.Password, speedLimitKBps, Record.InfoJson))
-            psi.ArgumentList.Add(arg);
+        var (args, configFile) = SiteVideo.Prepare(SiteVideo.Arguments(Record.Url, folder, Temp, FFmpeg.Path, SiteVideoTools.QuickJs,
+            Record.AudioOnly == true, Record.Referrer, Record.Cookies, Record.UserAgent, Record.Username, Record.Password,
+            speedLimitKBps, Record.InfoJson), proxy);
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        try { RunProcess(psi, folder); }
+        finally { if (configFile != null) try { File.Delete(configFile); } catch { } }
+    }
+
+    void RunProcess(ProcessStartInfo psi, string folder)
+    {
         try
         {
             if (stopping) return;
