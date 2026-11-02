@@ -145,16 +145,16 @@ struct DownloadInfoView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             SiteVideoTools.prepare()
             try? FileManager.default.createDirectory(at: AppPaths.parts, withIntermediateDirectories: true)
-            let prepared = SiteVideo.prepare(args, proxy: proxy)
-            defer { if let f = prepared.configFile { try? FileManager.default.removeItem(at: f) } }
+            let prepared = try? SiteVideo.prepare(args, proxy: proxy)  // nil: no lookup (the download itself reports it)
+            defer { if let f = prepared?.configFile { try? FileManager.default.removeItem(at: f) } }
             let p = Process()
             p.executableURL = SiteVideoTools.ytdlp
-            p.arguments = prepared.args
+            p.arguments = prepared?.args ?? []
             let out = Pipe()
             p.standardOutput = out
             p.standardError = FileHandle.nullDevice
             var info: SiteVideo.Info?
-            if (try? p.run()) != nil {
+            if prepared != nil, (try? p.run()) != nil {
                 let data = out.fileHandleForReading.readDataToEndOfFile()
                 p.waitUntilExit()
                 if p.terminationStatus == 0, let i = SiteVideo.info(data), (try? data.write(to: URL(fileURLWithPath: path))) != nil {

@@ -217,8 +217,8 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             guard !proxy.username.isEmpty else { return completionHandler(.performDefaultHandling, nil) }
             return completionHandler(.useCredential, URLCredential(user: proxy.username, password: proxy.password, persistence: .forSession))
         }
-        // The login is only ever given to the download's own server, never to a host it redirects to.
-        if let user = record.username, !user.isEmpty, space.host.lowercased() == record.url.host?.lowercased() {
+        // The login is only ever given to the download's own server (same host, port and https), never after a redirect.
+        if let user = record.username, !user.isEmpty, Network.sameSpace(space, record.url) {
             return completionHandler(.useCredential, URLCredential(user: user, password: record.password ?? "", persistence: .forSession))
         }
         completionHandler(.performDefaultHandling, nil)
@@ -295,7 +295,8 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             finishIfDone()
             return
         }
-        if record.segments[i].written > run.writtenAtStart { attempts[seg.id] = 0 }  // it made progress: fresh retries
+        // Progress that is kept (ranges) earns fresh retries; without ranges every retry starts over, so it doesn't.
+        if record.acceptsRanges, record.segments[i].written > run.writtenAtStart { attempts[seg.id] = 0 }
         let n = (attempts[seg.id] ?? 0) + 1
         attempts[seg.id] = n
         guard n <= 6 else {
@@ -385,6 +386,15 @@ public enum Network {
         func port(_ u: URL) -> Int { u.port ?? (u.scheme?.lowercased() == "https" ? 443 : 80) }
         let downgrade = origin.scheme?.lowercased() == "https" && url.scheme?.lowercased() != "https"
         return url.host?.lowercased() == origin.host?.lowercased() && port(url) == port(origin) && !downgrade
+    }
+
+    /// A login challenge from the download's own server: same host and port, and https if the download is https.
+    public static func sameSpace(_ space: URLProtectionSpace, _ origin: URL) -> Bool {
+        let scheme = origin.scheme?.lowercased() ?? ""
+        let port = origin.port ?? (scheme == "https" ? 443 : 80)
+        let proto = space.protocol?.lowercased() ?? ""
+        return space.host.lowercased() == origin.host?.lowercased() && space.port == port
+            && !(scheme == "https" && proto != "https")
     }
 
     /// The file's version as the server names it: a strong ETag, else Last-Modified (nil if neither).

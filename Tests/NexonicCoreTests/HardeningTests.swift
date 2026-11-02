@@ -12,6 +12,17 @@ final class HardeningTests: XCTestCase {
         XCTAssertFalse(Network.sameSite(URL(string: "https://files.example.com:8443/b")!, origin))
     }
 
+    func testLoginOnlyForTheSameProtectionSpace() {
+        let origin = URL(string: "https://files.example.com/a")!
+        func space(_ host: String, _ port: Int, _ proto: String) -> URLProtectionSpace {
+            URLProtectionSpace(host: host, port: port, protocol: proto, realm: nil, authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+        }
+        XCTAssertTrue(Network.sameSpace(space("files.example.com", 443, "https"), origin))
+        XCTAssertFalse(Network.sameSpace(space("files.example.com", 80, "http"), origin))  // after a redirect to http
+        XCTAssertFalse(Network.sameSpace(space("files.example.com", 8443, "https"), origin))
+        XCTAssertFalse(Network.sameSpace(space("cdn.example.com", 443, "https"), origin))
+    }
+
     func testResumeValidators() {
         func response(_ headers: [String: String]) -> HTTPURLResponse {
             HTTPURLResponse(url: URL(string: "https://e.com/f")!, statusCode: 206, httpVersion: nil, headerFields: headers)!
@@ -78,6 +89,10 @@ final class StorageTests: XCTestCase {
         let file = dir.appendingPathComponent("downloads.json")
         try Data("[{\"url\": ".utf8).write(to: file)
         XCTAssertNil(SavedFile.load([DownloadRecord].self, from: file))
+        XCTAssertTrue(SavedFile.read([DownloadRecord].self, from: file).damaged)  // its Keychain entries are kept
+        let missing = SavedFile.read([DownloadRecord].self, from: dir.appendingPathComponent("none.json"))
+        XCTAssertNil(missing.value)
+        XCTAssertFalse(missing.damaged)  // a first launch is not damage
         let kept = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("downloads.unreadable-") }
         XCTAssertEqual(kept.count, 1)
     }
@@ -111,7 +126,7 @@ final class VideoEngineTests: XCTestCase {
         p.username = "a@b"
         p.password = "p:w"
         XCTAssertEqual(SiteVideo.proxyURL(p), "socks5://a%40b:p%3Aw@10.0.0.1:1080")
-        let prepared = SiteVideo.prepare(["-J", "--add-header", "Cookie:x=1", "--", "u"], proxy: p)
+        let prepared = try SiteVideo.prepare(["-J", "--add-header", "Cookie:x=1", "--", "u"], proxy: p)
         let file = try XCTUnwrap(prepared.configFile)
         defer { try? FileManager.default.removeItem(at: file) }
         XCTAssertEqual(prepared.args.first, "--config-locations")

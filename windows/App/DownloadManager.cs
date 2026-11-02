@@ -57,6 +57,9 @@ public sealed class DownloadManager
             if (r.IsActive) r.Status = DownloadStatus.Queued;
             Rows.Add(new Row(r, QueueName));
         }
+        // Lists and settings saved by 0.6.1 hold cookies and passwords in plain text: encrypt them now.
+        if (File.Exists(AppPaths.Settings)) Write(AppPaths.Settings, Settings);
+        if (File.Exists(AppPaths.Downloads)) Save();
         limiter.SetLimit(Settings.SpeedLimitKBps * 1024);
         timer.Tick += (_, _) => Tick();
         timer.Start();

@@ -180,13 +180,14 @@ public enum SiteVideo {
     }
 
     /// The arguments to run, with the private options in a file readable only by this user (delete it when done).
-    public static func prepare(_ args: [String], proxy: ProxySettings?) -> (args: [String], configFile: URL?) {
+    /// Throws when that file can't be written: never falls back to secrets on the command line.
+    public static func prepare(_ args: [String], proxy: ProxySettings?) throws -> (args: [String], configFile: URL?) {
         let (rest, config) = privateOptions(args, proxy: proxy.flatMap(proxyURL))
         guard !config.isEmpty else { return (rest, nil) }
-        try? FileManager.default.createDirectory(at: AppPaths.parts, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: AppPaths.parts, withIntermediateDirectories: true)
         let file = AppPaths.parts.appendingPathComponent("yt-dlp-\(UUID().uuidString).conf")
         guard FileManager.default.createFile(atPath: file.path, contents: Data(config.utf8), attributes: [.posixPermissions: 0o600])
-        else { return (args, nil) }
+        else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: file.path]) }
         return (["--config-locations", file.path] + rest, file)
     }
 
@@ -337,10 +338,15 @@ public final class SiteVideoTransfer: Downloader, @unchecked Sendable {
         try? FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         let p = Process()
         p.executableURL = SiteVideoTools.ytdlp
-        let prepared = SiteVideo.prepare(SiteVideo.arguments(url: r.url, folder: folder.path, temp: temp.path, ffmpeg: FFmpeg.path,
-                                          quickJS: SiteVideoTools.quickJS, audioOnly: r.audioOnly == true, referrer: r.referrer,
-                                          cookies: r.cookies, userAgent: r.userAgent, username: r.username, password: r.password,
-                                          speedLimitKBps: speedLimitKBps, infoJSON: r.infoJSON), proxy: proxy)
+        let prepared: (args: [String], configFile: URL?)
+        do {
+            prepared = try SiteVideo.prepare(SiteVideo.arguments(url: r.url, folder: folder.path, temp: temp.path, ffmpeg: FFmpeg.path,
+                                              quickJS: SiteVideoTools.quickJS, audioOnly: r.audioOnly == true, referrer: r.referrer,
+                                              cookies: r.cookies, userAgent: r.userAgent, username: r.username, password: r.password,
+                                              speedLimitKBps: speedLimitKBps, infoJSON: r.infoJSON), proxy: proxy)
+        } catch {
+            return fail("The video engine's private settings could not be written: \(error.localizedDescription)")
+        }
         defer { if let f = prepared.configFile { try? FileManager.default.removeItem(at: f) } }
         p.arguments = prepared.args
         let out = Pipe(), err = Pipe()

@@ -171,6 +171,12 @@ public class HardeningTests
 /// <summary>Secrets saved encrypted, old plain lists still load, unreadable lists are kept.</summary>
 public class StorageTests
 {
+    sealed class Failing : ISecretProtector
+    {
+        public string? Protect(string plain) => null;
+        public string? Unprotect(string sealedText) => null;
+    }
+
     sealed class Reverse : ISecretProtector
     {
         public string? Protect(string plain) => new string(plain.Reverse().ToArray());
@@ -208,6 +214,11 @@ public class StorageTests
 
             // a secret that can't be decrypted (another Windows user) is dropped, the download is kept
             Assert.Equal("", Secrets.Open(Secrets.Prefix + "broken"));
+
+            // encryption failing never writes the secret in plain text
+            Secrets.Protector = new Failing();
+            Assert.Null(Secrets.Seal("sid=abc"));
+            Assert.DoesNotContain("sid=abc", Secrets.SerializeSealed(list));
         }
         finally { Secrets.Protector = before; }
     }
@@ -233,6 +244,8 @@ public class StorageTests
         File.WriteAllText(path, "[{\"Url\": ");  // a damaged list
         Assert.Null(SafeFile.Load(path, Secrets.DeserializeOpened<List<DownloadRecord>>));
         Assert.Single(Directory.GetFiles(dir, "downloads.unreadable-*.json"));  // kept for recovery, not overwritten
+        // a file that can't be read at all (locked, no permission) does not stop the app from starting
+        Assert.Null(SafeFile.Load<List<DownloadRecord>>(path, _ => throw new UnauthorizedAccessException()));
     }
 }
 

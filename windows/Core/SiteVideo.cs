@@ -370,9 +370,19 @@ public sealed class SiteVideoTransfer : IDownloader
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
         };
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
-        var (args, configFile) = SiteVideo.Prepare(SiteVideo.Arguments(Record.Url, folder, Temp, FFmpeg.Path, SiteVideoTools.QuickJs,
-            Record.AudioOnly == true, Record.Referrer, Record.Cookies, Record.UserAgent, Record.Username, Record.Password,
-            speedLimitKBps, Record.InfoJson), proxy);
+        List<string> args;
+        string? configFile;
+        try
+        {
+            (args, configFile) = SiteVideo.Prepare(SiteVideo.Arguments(Record.Url, folder, Temp, FFmpeg.Path, SiteVideoTools.QuickJs,
+                Record.AudioOnly == true, Record.Referrer, Record.Cookies, Record.UserAgent, Record.Username, Record.Password,
+                speedLimitKBps, Record.InfoJson), proxy);
+        }
+        catch (Exception e)  // never fall back to cookies and passwords on the command line
+        {
+            Fail("The video engine's private settings could not be written: " + e.Message);
+            return;
+        }
         foreach (var arg in args) psi.ArgumentList.Add(arg);
         try { RunProcess(psi, folder); }
         finally { if (configFile != null) try { File.Delete(configFile); } catch { } }

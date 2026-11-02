@@ -19,21 +19,22 @@ public interface ISecretProtector
 public static class Secrets
 {
     public const string Prefix = "dpapi:";
-    public static ISecretProtector Protector { get; set; } = OperatingSystem.IsWindows() ? new Dpapi() : new NoProtection();
+    public static ISecretProtector? Protector { get; set; } = OperatingSystem.IsWindows() ? new Dpapi() : null;
 
     /// <summary>Field names (as saved) that hold secrets, in download records and in settings.Proxy.</summary>
     static readonly string[] RecordFields = { "Cookies", "Password" };
 
     public static string? Seal(string? plain)
     {
-        if (string.IsNullOrEmpty(plain) || plain.StartsWith(Prefix, StringComparison.Ordinal)) return plain;
-        return Protector.Protect(plain) is { } p ? Prefix + p : plain;  // could not encrypt: keep it rather than lose it
+        if (string.IsNullOrEmpty(plain) || plain.StartsWith(Prefix, StringComparison.Ordinal) || Protector == null) return plain;
+        // Could not encrypt: the secret is not written at all (never plain text). It stays in memory for this session.
+        return Protector.Protect(plain) is { } p ? Prefix + p : null;
     }
 
     public static string? Open(string? stored)
     {
         if (stored == null || !stored.StartsWith(Prefix, StringComparison.Ordinal)) return stored;
-        return Protector.Unprotect(stored[Prefix.Length..]) ?? "";  // another user or computer: the secret is gone, not the download
+        return Protector?.Unprotect(stored[Prefix.Length..]) ?? "";  // another user or computer: the secret is gone, not the download
     }
 
     /// <summary>The JSON of a value with its secret fields encrypted (`DownloadRecord` lists and `AppSettings`).</summary>
@@ -66,12 +67,6 @@ public static class Secrets
                     proxy["Password"] = f(ps);
                 break;
         }
-    }
-
-    sealed class NoProtection : ISecretProtector
-    {
-        public string? Protect(string plain) => null;  // nothing to encrypt with: values stay as they are
-        public string? Unprotect(string sealedText) => null;
     }
 
     /// <summary>CryptProtectData / CryptUnprotectData for the current user, with an app-specific entropy.</summary>
@@ -172,7 +167,8 @@ public static class SafeFile
     {
         if (!File.Exists(path)) return default;
         try { return parse(File.ReadAllText(path)); }
-        catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException or ArgumentException)
+        catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException or ArgumentException
+                                       or IOException or UnauthorizedAccessException)
         {
             try { File.Copy(path, Path.ChangeExtension(path, $".unreadable-{DateTime.Now:yyyyMMdd-HHmmss}.json"), true); } catch { }
             return default;

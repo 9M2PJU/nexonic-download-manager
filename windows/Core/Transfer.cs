@@ -156,8 +156,11 @@ public sealed class Transfer : IDownloader
         }
     }
 
-    async Task DownloadAllAsync(CancellationToken ct)
+    async Task DownloadAllAsync(CancellationToken outer)
     {
+        // One failing part stops its siblings, and they are awaited before anything is cleaned up or reported.
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(outer);
+        var ct = stop.Token;
         var running = new List<Task>();
         List<Segment> pending;
         lock (Record.Segments) pending = Record.Segments.Where(s => !s.IsComplete).ToList();
@@ -166,6 +169,11 @@ public sealed class Transfer : IDownloader
         {
             var done = await Task.WhenAny(running);
             running.Remove(done);
+            if (done.IsFaulted || (done.IsCanceled && !outer.IsCancellationRequested))
+            {
+                stop.Cancel();
+                try { await Task.WhenAll(running); } catch { /* stopped on purpose */ }
+            }
             await done; // rethrows a final failure
             if (!Record.AcceptsRanges || running.Count >= connections) continue;
             Segment? added = null;
@@ -191,7 +199,7 @@ public sealed class Transfer : IDownloader
         {
             try
             {
-                if (writtenAtStart >= 0 && seg.Written > writtenAtStart) attempt = 1; // it made progress: a fresh set of retries
+                if (Record.AcceptsRanges && writtenAtStart >= 0 && seg.Written > writtenAtStart) attempt = 1; // kept progress: fresh retries
                 writtenAtStart = seg.Written;
                 if (!Record.AcceptsRanges) seg.Written = 0;
                 string? range = null;
@@ -233,7 +241,8 @@ public sealed class Transfer : IDownloader
                     if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
                 }
             }
-            catch (Exception e) when (e is not FileChangedException && !ct.IsCancellationRequested && attempt < 6)
+            catch (Exception e) when (e is not FileChangedException && !ct.IsCancellationRequested
+                                      && (attempt < 6 || (Record.AcceptsRanges && seg.Written > writtenAtStart)))
             {
                 await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt - 1))), ct);
             }

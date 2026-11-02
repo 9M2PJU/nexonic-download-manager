@@ -103,16 +103,20 @@ public enum Secrets {
 public enum SavedFile {
     /// Decodes a saved file. One that exists but can't be read is kept as "name.unreadable-DATE.json" (so the next save,
     /// which writes the empty list, can't destroy it) and nil is returned.
-    public static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+    public static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? { read(type, from: url).value }
+
+    /// Like `load`, and tells whether a file was there but could not be read (`damaged`).
+    public static func read<T: Decodable>(_ type: T.Type, from url: URL) -> (value: T?, damaged: Bool) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return (nil, false) }
+        guard let data = try? Data(contentsOf: url) else { return (nil, true) }
         do {
-            return try JSONDecoder().decode(type, from: data)
+            return (try JSONDecoder().decode(type, from: data), false)
         } catch {
             let f = DateFormatter()
             f.dateFormat = "yyyyMMdd-HHmmss"
             let copy = url.deletingPathExtension().appendingPathExtension("unreadable-\(f.string(from: Date())).json")
             try? FileManager.default.copyItem(at: url, to: copy)
-            return nil
+            return (nil, true)
         }
     }
 }
