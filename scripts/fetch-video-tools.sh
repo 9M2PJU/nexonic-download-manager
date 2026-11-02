@@ -10,19 +10,33 @@ QJS=v0.16.1
 YT=https://github.com/yt-dlp/yt-dlp/releases/latest/download
 QJ="https://github.com/quickjs-ng/quickjs/releases/download/$QJS"
 get() { curl -fsSL --retry 4 -o "$2" "$1"; }
+sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+# Every downloaded tool is checked before it can end up in an installer: QuickJS against hashes pinned here,
+# yt-dlp against the SHA2-256SUMS file of the same yt-dlp release.
+check() {
+  local got; got="$(sha "$1")"
+  [ "$got" = "$2" ] || { echo "Checksum mismatch for $1: got $got, expected $2" >&2; exit 1; }
+}
+SUMS="$(mktemp)"; get "$YT/SHA2-256SUMS" "$SUMS"
+ytsum() { awk -v f="$1" '$2 == f { print $1 }' "$SUMS"; }
 
 case "$TARGET" in
   mac)
     get "$YT/yt-dlp_macos" "$OUT/yt-dlp"
+    check "$OUT/yt-dlp" "$(ytsum yt-dlp_macos)"
     get "$QJ/qjs-darwin-arm64" "$OUT/qjs-arm64"
+    check "$OUT/qjs-arm64" 9a24e7435036906c098d539daf47bcc8e7e8ad2f3aa084a0bce9313c6c3527e0
     get "$QJ/qjs-darwin-x86_64" "$OUT/qjs-x86_64"
+    check "$OUT/qjs-x86_64" 5982a1ebb20e1a9bf6162bafd29d445823616084cfeddee8881f8d69d6e0fd74
     lipo -create "$OUT/qjs-arm64" "$OUT/qjs-x86_64" -output "$OUT/qjs"
     rm "$OUT/qjs-arm64" "$OUT/qjs-x86_64"
     chmod +x "$OUT/yt-dlp" "$OUT/qjs"
     ;;
   windows)
     get "$YT/yt-dlp.exe" "$OUT/yt-dlp.exe"
+    check "$OUT/yt-dlp.exe" "$(ytsum yt-dlp.exe)"
     get "$QJ/qjs-windows-x86_64.exe" "$OUT/qjs.exe"
+    check "$OUT/qjs.exe" 55a1b69cd4fdb6b0d3f8fdd910d0e89519f5330e408462084140c7b3b964fdae
     ;;
   *) echo "usage: $0 mac|windows OUT_DIR" >&2; exit 2 ;;
 esac
@@ -32,5 +46,9 @@ cat > "$OUT/NOTICE-video-tools-2.txt" <<TXT
   The app keeps its own copy up to date once a day, because video sites change often.
 - QuickJS-ng $QJS (MIT License): https://github.com/quickjs-ng/quickjs
 They are used unmodified.
+
+QuickJS-ng license:
 TXT
+get "https://raw.githubusercontent.com/quickjs-ng/quickjs/$QJS/LICENSE" "$OUT/qjs-license.txt"
+cat "$OUT/qjs-license.txt" >> "$OUT/NOTICE-video-tools-2.txt" && rm "$OUT/qjs-license.txt"
 echo "Fetched the video engine for $TARGET into $OUT"
