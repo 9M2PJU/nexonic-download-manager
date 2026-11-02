@@ -14,6 +14,9 @@ public static class Updater
     static DownloadManager? manager;
     static DispatcherTimer? daily;
     static bool busy;
+    static bool installing;   // an update is downloading: never start a second one
+    static Window? progressWindow;
+    static bool closingProgress;
 
     /// <summary>Checks a few seconds after the app opens, then once a day while it keeps running.</summary>
     public static void Start(DownloadManager m)
@@ -38,6 +41,7 @@ public static class Updater
 
     public static async Task Check(bool manual)
     {
+        if (installing) { progressWindow?.Activate(); return; }   // already updating: show that instead
         if (manager is null || busy || (!manual && !manager.Settings.CheckForUpdates)) return;
         busy = true;
         Updates.Release? release = null;
@@ -56,6 +60,7 @@ public static class Updater
         finally { busy = false; }
 
         var current = HelpWindows.Version;
+        if (installing) return;
         if (release is null)
         {
             if (manual) MessageBox.Show("GitHub didn't answer. Check your internet connection and try again later, or download the newest version from the website.", "Couldn't check for updates");
@@ -68,7 +73,9 @@ public static class Updater
         }
         if (!manual && manager.Settings.SkippedVersion == release.Version) return;
 
-        switch (Ask(release, current))
+        var choice = Ask(release, current);
+        if (installing) return;   // another check's Update Now got there first
+        switch (choice)
         {
             case "update": await Install(release); break;
             case "skip":
@@ -140,6 +147,9 @@ public static class Updater
                 },
             },
         };
+        installing = true;
+        progressWindow = progress;
+        progress.Closing += (_, e) => { if (installing && progress.IsVisible && !closingProgress) e.Cancel = true; };  // stays until the download ends
         progress.Show();
         var file = Path.Combine(Path.GetTempPath(), $"NexonicDownloadManager-{r.Version}-Setup.exe");
         try
@@ -148,10 +158,11 @@ public static class Updater
             await using (var src = await c.GetStreamAsync(url))
             await using (var dst = File.Create(file))
                 await src.CopyToAsync(dst);
-            progress.Close();
+            closingProgress = true; progress.Close(); closingProgress = false;
             if (!Updates.Verify(file, digest))
             {
                 try { File.Delete(file); } catch { }
+                installing = false;
                 MessageBox.Show("The downloaded update did not match the published file, so it was not installed.\n" +
                                 "Download it from the release page instead.", "Update");
                 HelpWindows.Open(r.Page);
@@ -161,7 +172,8 @@ public static class Updater
         }
         catch (Exception e)
         {
-            progress.Close();
+            closingProgress = true; progress.Close(); closingProgress = false;
+            installing = false;
             MessageBox.Show("The update could not be downloaded: " + e.Message + "\nTry again later, or download it from the release page.", "Update");
             return;
         }

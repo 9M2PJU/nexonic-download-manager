@@ -51,22 +51,26 @@ public partial class MainWindow : Window
             Content = text.ToUpperInvariant(), IsEnabled = false, FontSize = 11, FontWeight = FontWeights.SemiBold,
             Foreground = Brushes.Gray, Margin = new Thickness(4, 8, 0, 2),
         });
-        void Entry(string text, string key)
+        void Entry(string text, string key, int indent = 0)
         {
             var row = new DockPanel { LastChildFill = true, MinWidth = 150 };
             var count = new TextBlock { Text = CountFor(key), Foreground = Brushes.Gray, FontSize = 11, Margin = new Thickness(8, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(count, Dock.Right);
             row.Children.Add(count);
             row.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
-            Sidebar.Items.Add(new ListBoxItem { Content = row, Tag = key, Padding = new Thickness(14, 5, 4, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch });
+            Sidebar.Items.Add(new ListBoxItem { Content = row, Tag = key, Padding = new Thickness(14 + indent * 16, 5, 4, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch });
         }
+        // Like IDM: each list opens into the file types it holds (sorted automatically by file type).
+        static string Label(string c) => c == nameof(FileCategory.Other) ? "General" : c;
+        void Types(string prefix) { foreach (var c in Enum.GetNames<FileCategory>()) Entry(Label(c), prefix + c, 1); }
         Header("Downloads");
         Entry("All Downloads", "all");
+        Types("cat:");
         Entry("In Progress", "active");
         Entry("Unfinished", "unfinished");
+        Types("ucat:");
         Entry("Finished", "finished");
-        Header("Categories");
-        foreach (var c in Enum.GetNames<FileCategory>()) Entry(c, "cat:" + c);
+        Types("fcat:");
         Header("Queues");
         foreach (var q in manager.Queues) Entry((q.Running ? "▶ " : "⏸ ") + q.Name, "queue:" + q.Id);
         Sidebar.SelectedItem = Sidebar.Items.OfType<ListBoxItem>().FirstOrDefault(i => (string?)i.Tag == filter)
@@ -81,6 +85,8 @@ public partial class MainWindow : Window
         "unfinished" => r.Status != DownloadStatus.Finished,
         "finished" => r.Status == DownloadStatus.Finished,
         _ when f.StartsWith("cat:") => r.Category.ToString() == f[4..],
+        _ when f.StartsWith("ucat:") => r.Status != DownloadStatus.Finished && r.Category.ToString() == f[5..],
+        _ when f.StartsWith("fcat:") => r.Status == DownloadStatus.Finished && r.Category.ToString() == f[5..],
         _ when f.StartsWith("queue:") => r.Queue == f[6..],
         _ => true,
     };
@@ -198,9 +204,42 @@ public partial class MainWindow : Window
 
     void OnResume(object s, RoutedEventArgs e) { foreach (var r in Selected) manager.Resume(r); }
     void OnPause(object s, RoutedEventArgs e) { foreach (var r in Selected) manager.Pause(r); }
-    void OnRemove(object s, RoutedEventArgs e) { foreach (var r in Selected) manager.Remove(r); }
+    void OnRemove(object s, RoutedEventArgs e) => ConfirmRemove(Selected, toRecycleBin: false);
+
+    void OnSelectAll(object s, RoutedEventArgs e)
+    {
+        if (Grid.Items.Count > 0 && Grid.SelectedItems.Count == Grid.Items.Count) Grid.UnselectAll();
+        else Grid.SelectAll();
+        Grid.Focus();
+    }
+
+    /// <summary>Asks before anything is removed. Files stay unless the user chose the Recycle Bin.</summary>
+    void ConfirmRemove(List<Row> rows, bool toRecycleBin)
+    {
+        if (rows.Count == 0) return;
+        var what = rows.Count == 1 ? "this download" : $"these {rows.Count} downloads";
+        var text = toRecycleBin
+            ? $"Delete {what} and move the {(rows.Count == 1 ? "file" : "files")} to the Recycle Bin?\n\nYou can still restore them from the Recycle Bin."
+            : $"Remove {what} from the list?\n\nThe downloaded files stay on your PC.";
+        if (MessageBox.Show(this, text, "Delete", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        foreach (var r in rows)
+        {
+            if (toRecycleBin && r.Record.SavedPath is { } p && System.IO.File.Exists(p))
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            manager.Remove(r);
+        }
+    }
     void OnPauseAll(object s, RoutedEventArgs e) => manager.PauseAll();
-    void OnClear(object s, RoutedEventArgs e) => manager.ClearFinished();
+    void OnClear(object s, RoutedEventArgs e)
+    {
+        var done = manager.Rows.Where(r => r.Record.Status == DownloadStatus.Finished).ToList();  // only the ones counted in the question
+        var n = done.Count;
+        if (n == 0) return;
+        if (MessageBox.Show(this, $"Remove {n} completed {(n == 1 ? "download" : "downloads")} from the list?\n\nThe downloaded files stay on your PC.",
+                "Delete Completed", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel) == MessageBoxResult.OK)
+            foreach (var r in done) manager.Remove(r);
+    }
     void OnScheduler(object s, RoutedEventArgs e) { Dialogs.Scheduler(this, manager, CurrentQueue); BuildSidebar(); }
     void OnStartQueue(object s, RoutedEventArgs e) { manager.StartQueue(CurrentQueue); BuildSidebar(); }
     void OnStopQueue(object s, RoutedEventArgs e) { manager.StopQueue(CurrentQueue); BuildSidebar(); }
@@ -210,16 +249,7 @@ public partial class MainWindow : Window
     void OnHelp(object s, RoutedEventArgs e) => HelpWindows.ShowHelp(this);
     void OnAbout(object s, RoutedEventArgs e) => HelpWindows.ShowAbout(this);
 
-    void OnRemoveFile(object s, RoutedEventArgs e)
-    {
-        foreach (var r in Selected)
-        {
-            if (r.Record.SavedPath is { } p && System.IO.File.Exists(p))
-                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
-                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
-            manager.Remove(r);
-        }
-    }
+    void OnRemoveFile(object s, RoutedEventArgs e) => ConfirmRemove(Selected, toRecycleBin: true);
 
     void OnOpen(object s, RoutedEventArgs e)
     {
