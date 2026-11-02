@@ -167,3 +167,71 @@ public class HardeningTests
         Assert.Null(creds.GetCredential(new Uri("https://evil.example.net/x"), "Basic"));
     }
 }
+
+/// <summary>Secrets saved encrypted, old plain lists still load, unreadable lists are kept.</summary>
+public class StorageTests
+{
+    sealed class Reverse : ISecretProtector
+    {
+        public string? Protect(string plain) => new string(plain.Reverse().ToArray());
+        public string? Unprotect(string sealedText) => sealedText == "broken" ? null : new string(sealedText.Reverse().ToArray());
+    }
+
+    [Fact]
+    public void SecretsAreSavedEncryptedAndReadBack()
+    {
+        var before = Secrets.Protector;
+        Secrets.Protector = new Reverse();
+        try
+        {
+            var list = new List<DownloadRecord> { new() { Url = "https://e.com/a", Cookies = "sid=abc", Username = "me", Password = "pw" } };
+            var json = Secrets.SerializeSealed(list);
+            Assert.DoesNotContain("sid=abc", json);
+            Assert.DoesNotContain("\"pw\"", json);
+            Assert.Contains("dpapi:", json);
+            var back = Secrets.DeserializeOpened<List<DownloadRecord>>(json)!;
+            Assert.Equal("sid=abc", back[0].Cookies);
+            Assert.Equal("pw", back[0].Password);
+            Assert.Equal("me", back[0].Username);  // user names are not secret
+
+            // a list saved by 0.6.1 (plain text) still loads, and is encrypted on the next save
+            var old = "[{\"Url\":\"https://e.com/b\",\"Cookies\":\"old=1\",\"Password\":\"p\"}]";
+            var loaded = Secrets.DeserializeOpened<List<DownloadRecord>>(old)!;
+            Assert.Equal("old=1", loaded[0].Cookies);
+            Assert.DoesNotContain("old=1", Secrets.SerializeSealed(loaded));
+
+            var settings = new AppSettings();
+            settings.Proxy.Password = "proxy-pw";
+            var sj = Secrets.SerializeSealed(settings);
+            Assert.DoesNotContain("proxy-pw", sj);
+            Assert.Equal("proxy-pw", Secrets.DeserializeOpened<AppSettings>(sj)!.Proxy.Password);
+
+            // a secret that can't be decrypted (another Windows user) is dropped, the download is kept
+            Assert.Equal("", Secrets.Open(Secrets.Prefix + "broken"));
+        }
+        finally { Secrets.Protector = before; }
+    }
+
+    [Fact]
+    public void WindowsEncryptionRoundTrip()
+    {
+        if (!OperatingSystem.IsWindows()) return;  // DPAPI exists only on Windows (CI runs this on windows-latest)
+        var sealedText = Secrets.Seal("sid=abc; token=xyz")!;
+        Assert.True(sealedText.StartsWith(Secrets.Prefix));
+        Assert.DoesNotContain("sid=abc", sealedText);
+        Assert.Equal("sid=abc; token=xyz", Secrets.Open(sealedText));
+    }
+
+    [Fact]
+    public void SavedListsSurviveCrashesAndDamage()
+    {
+        var dir = Directory.CreateTempSubdirectory("ndm-store").FullName;
+        var path = Path.Combine(dir, "downloads.json");
+        SafeFile.Write(path, "[1,2]");
+        Assert.Equal("[1,2]", File.ReadAllText(path));
+        Assert.False(File.Exists(path + ".tmp"));
+        File.WriteAllText(path, "[{\"Url\": ");  // a damaged list
+        Assert.Null(SafeFile.Load(path, Secrets.DeserializeOpened<List<DownloadRecord>>));
+        Assert.Single(Directory.GetFiles(dir, "downloads.unreadable-*.json"));  // kept for recovery, not overwritten
+    }
+}

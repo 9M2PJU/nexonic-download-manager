@@ -38,3 +38,47 @@ final class HardeningTests: XCTestCase {
         XCTAssertNil(list[0].validator)
     }
 }
+
+/// Cookies and passwords leave the JSON files for the Keychain; damaged lists are kept.
+final class StorageTests: XCTestCase {
+    func testSecretsMoveOutOfTheFiles() throws {
+        var a = DownloadRecord(url: URL(string: "https://e.com/a")!, folder: URL(fileURLWithPath: "/tmp"), cookies: "sid=1")
+        a.username = "me"
+        a.password = "pw"
+        var settings = AppSettings()
+        settings.proxy.password = "proxy-pw"
+        let secrets = Secrets.collect([a], settings)
+        XCTAssertEqual(secrets.count, 3)
+        let fileList = Secrets.stripped([a])
+        let fileJSON = String(decoding: try JSONEncoder().encode(fileList), as: UTF8.self)
+        XCTAssertFalse(fileJSON.contains("sid=1") || fileJSON.contains("\"pw\""))
+        XCTAssertTrue(fileJSON.contains("\"me\""))  // user names are not secret
+        XCTAssertEqual(Secrets.stripped(settings).proxy.password, "")
+
+        var back = fileList
+        var backSettings = Secrets.stripped(settings)
+        Secrets.fill(&back, &backSettings, from: secrets)
+        XCTAssertEqual(back[0].cookies, "sid=1")
+        XCTAssertEqual(back[0].password, "pw")
+        XCTAssertEqual(backSettings.proxy.password, "proxy-pw")
+
+        // a value still in the file (saved by 0.6.1) is kept
+        var old = [a]
+        old[0].cookies = "newer=2"
+        Secrets.fill(&old, &backSettings, from: secrets)
+        XCTAssertEqual(old[0].cookies, "newer=2")
+
+        let store = MemoryStore(nil)  // Keychain denied
+        XCTAssertNil(store.read())
+    }
+
+    func testDamagedListIsKept() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("downloads.json")
+        try Data("[{\"url\": ".utf8).write(to: file)
+        XCTAssertNil(SavedFile.load([DownloadRecord].self, from: file))
+        let kept = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("downloads.unreadable-") }
+        XCTAssertEqual(kept.count, 1)
+    }
+}

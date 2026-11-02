@@ -475,20 +475,14 @@ public sealed class DownloadManager
 
     public void Save() => Write(AppPaths.Downloads, Rows.Select(r => r.Record).ToList());
 
+    /// <summary>Saves atomically, with cookies and passwords encrypted for this Windows user (see Secrets).</summary>
     static void Write<T>(string path, T value)
     {
-        try
-        {
-            Directory.CreateDirectory(AppPaths.Support);
-            File.WriteAllText(path, JsonSerializer.Serialize(value));
-        }
+        try { SafeFile.Write(path, Secrets.SerializeSealed(value)); }
         catch { }
     }
 
-    static T? Load<T>(string path)
-    {
-        try { return File.Exists(path) ? JsonSerializer.Deserialize<T>(File.ReadAllText(path)) : default; } catch { return default; }
-    }
+    static T? Load<T>(string path) => SafeFile.Load(path, Secrets.DeserializeOpened<T>);
 }
 
 /// <summary>One row in the table; raises change notifications for the bound columns.</summary>

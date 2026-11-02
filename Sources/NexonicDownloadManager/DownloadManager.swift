@@ -26,10 +26,15 @@ final class DownloadManager: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             limiter.setLimit(bytesPerSecond: settings.speedLimitKBps * 1024)
-            save(settings, to: AppPaths.settings)
+            saveSettings()
             schedule()
         }
     }
+
+    /// Cookies and passwords are kept in the Keychain (see Secrets); `stored` is what it holds now.
+    private static let vault: SecretStore = KeychainStore()
+    private var vaultReadable = false
+    private var stored: [String: String] = [:]
 
     private var transfers: [UUID: Downloader] = [:]
     private var recent: [UUID: [Int64]] = [:]  // received bytes at each of the last ticks
@@ -44,8 +49,15 @@ final class DownloadManager: ObservableObject {
 
     init() {
         try? FileManager.default.createDirectory(at: AppPaths.support, withIntermediateDirectories: true)
-        settings = Self.load(AppSettings.self, from: AppPaths.settings) ?? AppSettings()
-        items = Self.load([DownloadRecord].self, from: AppPaths.downloads) ?? []
+        var loadedSettings = Self.load(AppSettings.self, from: AppPaths.settings) ?? AppSettings()
+        var loadedItems = Self.load([DownloadRecord].self, from: AppPaths.downloads) ?? []
+        if let saved = Self.vault.read() {
+            vaultReadable = true
+            stored = saved
+            Secrets.fill(&loadedItems, &loadedSettings, from: saved)
+        }
+        settings = loadedSettings
+        items = loadedItems
         var qs = Self.load([DownloadQueue].self, from: AppPaths.queues) ?? []
         if !qs.contains(where: \.isMain) { qs.insert(.main, at: 0) }
         queues = qs
@@ -57,6 +69,9 @@ final class DownloadManager: ObservableObject {
         if settings.notifications {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
+        // Lists saved by 0.6.1 or older hold cookies and passwords in the file: move them into the Keychain now.
+        persist()
+        saveSettings()
         collectInbox()
         schedule()
         DispatchQueue.global(qos: .utility).async { SiteVideoTools.prepare() }  // keeps the video engine current
@@ -512,7 +527,20 @@ final class DownloadManager: ObservableObject {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
     }
 
-    private func persist() { save(items, to: AppPaths.downloads) }
+    private func persist() { save(syncSecrets() ? Secrets.stripped(items) : items, to: AppPaths.downloads) }
+
+    private func saveSettings() { save(syncSecrets() ? Secrets.stripped(settings) : settings, to: AppPaths.settings) }
+
+    /// Writes the current secrets to the Keychain when they changed. False = they must stay in the file (the Keychain
+    /// could not be read or written), so nothing is ever lost.
+    private func syncSecrets() -> Bool {
+        guard vaultReadable else { return false }
+        let all = Secrets.collect(items, settings)
+        if all == stored { return true }
+        guard Self.vault.write(all) else { return false }
+        stored = all
+        return true
+    }
 
     private func save<T: Encodable>(_ value: T, to url: URL) {
         guard let data = try? JSONEncoder().encode(value) else { return }
@@ -520,8 +548,5 @@ final class DownloadManager: ObservableObject {
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)  // may hold passwords
     }
 
-    private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
-    }
+    private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? { SavedFile.load(type, from: url) }
 }
