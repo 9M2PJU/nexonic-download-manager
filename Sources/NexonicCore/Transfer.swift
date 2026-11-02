@@ -26,6 +26,8 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         let task: URLSessionDataTask
         let segmentID: Int
         let handle: FileHandle
+        let from: Int64  // first byte asked for (checked against the answer's Content-Range)
+        let writtenAtStart: Int64
     }
 
     private var partsFolder: URL { AppPaths.parts.appendingPathComponent(record.id.uuidString, isDirectory: true) }
@@ -80,10 +82,12 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
 
     // MARK: start / resume
 
-    private func request(range: String?) -> URLRequest {
+    private func request(range: String?, ifRange: String? = nil) -> URLRequest {
         var req = URLRequest(url: record.url)
         req.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         if let range { req.setValue(range, forHTTPHeaderField: "Range") }
+        // With If-Range the server sends the whole (new) file instead of a part of it if the file changed.
+        if range != nil, let ifRange, !ifRange.isEmpty { req.setValue(ifRange, forHTTPHeaderField: "If-Range") }
         if let ref = record.referrer, !ref.isEmpty { req.setValue(ref, forHTTPHeaderField: "Referer") }
         if let ua = record.userAgent, !ua.isEmpty { req.setValue(ua, forHTTPHeaderField: "User-Agent") }
         if let cookies = record.cookies, !cookies.isEmpty { req.setValue(cookies, forHTTPHeaderField: "Cookie") }
@@ -125,7 +129,10 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
            record.fileName == FileNames.fromURL(record.url) {
             record.fileName = name
         }
+        let validator = Network.validator(response)
+        // Resume only into the same file: same size and, when the server names its version, the same ETag/Last-Modified.
         let canResume = !record.segments.isEmpty && ranges && record.acceptsRanges && size != nil && size == record.size
+            && Network.sameVersion(record.validator, validator)
         if canResume {
             for i in record.segments.indices {
                 let file = partURL(record.segments[i].id)
@@ -138,6 +145,7 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             try? FileManager.default.removeItem(at: partsFolder)
             record.size = size
             record.acceptsRanges = ranges
+            record.validator = validator
             record.segments = SegmentPlanner.plan(size: ranges ? size : nil, connections: ranges ? connections : 1)
             if !ranges, let size { record.segments = [Segment(id: 0, start: 0, end: size - 1)] }
         }
@@ -167,12 +175,13 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         guard let handle = try? FileHandle(forWritingTo: file) else { return fail("Cannot write to \(file.path)") }
         _ = try? handle.seekToEnd()
         var range: String?
+        let from = seg.start + record.segments[i].written
         if record.acceptsRanges {
-            let from = seg.start + record.segments[i].written
             range = seg.end >= 0 ? "bytes=\(from)-\(seg.end)" : "bytes=\(from)-"
         }
-        let task = session.dataTask(with: request(range: range))
-        running[task.taskIdentifier] = Running(task: task, segmentID: seg.id, handle: handle)
+        let task = session.dataTask(with: request(range: range, ifRange: record.validator))
+        running[task.taskIdentifier] = Running(task: task, segmentID: seg.id, handle: handle, from: from,
+                                               writtenAtStart: record.segments[i].written)
         task.resume()
     }
 
@@ -189,8 +198,9 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
     public func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                            newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         var next = request
-        if next.url?.host?.lowercased() != record.url.host?.lowercased() {
-            next.setValue(nil, forHTTPHeaderField: "Cookie")  // cookies only go to the original host
+        if let url = next.url, !Network.sameSite(url, record.url) {
+            next.setValue(nil, forHTTPHeaderField: "Cookie")  // cookies only go to the original host (and never to plain http)
+            next.setValue(nil, forHTTPHeaderField: "Authorization")
         }
         completionHandler(next)
     }
@@ -207,7 +217,8 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             guard !proxy.username.isEmpty else { return completionHandler(.performDefaultHandling, nil) }
             return completionHandler(.useCredential, URLCredential(user: proxy.username, password: proxy.password, persistence: .forSession))
         }
-        if let user = record.username, !user.isEmpty {
+        // The login is only ever given to the download's own server, never to a host it redirects to.
+        if let user = record.username, !user.isEmpty, space.host.lowercased() == record.url.host?.lowercased() {
             return completionHandler(.useCredential, URLCredential(user: user, password: record.password ?? "", persistence: .forSession))
         }
         completionHandler(.performDefaultHandling, nil)
@@ -221,8 +232,19 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             probed(response as? HTTPURLResponse, error: nil)
             return
         }
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let http = response as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
         let wantsRange = record.acceptsRanges
+        if code == 200, wantsRange, let v = record.validator, !v.isEmpty {
+            // If-Range said the file changed: never write the new file's bytes after the old one's.
+            completionHandler(.cancel)
+            return fileChanged()
+        }
+        if code == 206, let run = running[dataTask.taskIdentifier],
+           !Network.rangeMatches(http?.value(forHTTPHeaderField: "Content-Range"), from: run.from, size: record.size) {
+            completionHandler(.cancel)  // a different part than asked for: retried, never written
+            return
+        }
         if code == 206 || (code == 200 && !wantsRange) {
             completionHandler(.allow)
         } else {
@@ -273,6 +295,7 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
             finishIfDone()
             return
         }
+        if record.segments[i].written > run.writtenAtStart { attempts[seg.id] = 0 }  // it made progress: fresh retries
         let n = (attempts[seg.id] ?? 0) + 1
         attempts[seg.id] = n
         guard n <= 6 else {
@@ -329,6 +352,16 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
         }
     }
 
+    /// The file on the server is not the one this download started with: start again from the beginning next time.
+    private func fileChanged() {
+        guard !stopping else { return }
+        fail("The file changed on the server since this download started. Resume to download the new version from the start")
+        record.segments = []
+        record.validator = nil
+        try? FileManager.default.removeItem(at: partsFolder)
+        notify(force: true)
+    }
+
     private func fail(_ message: String) {
         stopping = true
         cancelAll()
@@ -346,6 +379,32 @@ public final class Transfer: NSObject, URLSessionDataDelegate, @unchecked Sendab
 }
 
 public enum Network {
+    /// Same server and no step down from https: cookies and logins may be sent there.
+    public static func sameSite(_ url: URL, _ origin: URL) -> Bool {
+        func port(_ u: URL) -> Int { u.port ?? (u.scheme?.lowercased() == "https" ? 443 : 80) }
+        let downgrade = origin.scheme?.lowercased() == "https" && url.scheme?.lowercased() != "https"
+        return url.host?.lowercased() == origin.host?.lowercased() && port(url) == port(origin) && !downgrade
+    }
+
+    /// The file's version as the server names it: a strong ETag, else Last-Modified (nil if neither).
+    public static func validator(_ response: HTTPURLResponse) -> String? {
+        if let tag = response.value(forHTTPHeaderField: "ETag"), !tag.isEmpty, !tag.hasPrefix("W/") { return tag }
+        if let lm = response.value(forHTTPHeaderField: "Last-Modified"), !lm.isEmpty { return lm }
+        return nil
+    }
+
+    /// True unless both versions are known and differ (older lists have none: the size decides, as before).
+    public static func sameVersion(_ saved: String?, _ now: String?) -> Bool { saved == nil || now == nil || saved == now }
+
+    /// A 206 answer must start where we asked and belong to a file of the expected size ("bytes 5-9/10").
+    public static func rangeMatches(_ header: String?, from: Int64, size: Int64?) -> Bool {
+        guard let header, let m = header.range(of: #"bytes\s+(\d+)-(\d+)/(\d+|\*)"#, options: .regularExpression) else { return false }
+        let parts = header[m].dropFirst(6).split(whereSeparator: { $0 == "-" || $0 == "/" }).map { String($0).trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 3, let start = Int64(parts[0]), start == from else { return false }
+        if let size, let total = Int64(parts[2]) { return total == size }
+        return true
+    }
+
     /// Session settings with the chosen proxy.
     public static func configuration(proxy: ProxySettings) -> URLSessionConfiguration {
         let config = URLSessionConfiguration.default

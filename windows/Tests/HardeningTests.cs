@@ -1,0 +1,169 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Sockets;
+using System.Text;
+using Nexonic.Core;
+using Xunit;
+
+/// <summary>Security and integrity fixes: private headers stay on the download's own server, resumes never mix files.</summary>
+public class HardeningTests
+{
+    /// <summary>A tiny HTTP server that records every request's headers.</summary>
+    sealed class Server : IDisposable
+    {
+        readonly TcpListener listener;
+        readonly Func<string, Dictionary<string, string>, (int Code, Dictionary<string, string> Headers, byte[] Body)> handle;
+        public readonly List<Dictionary<string, string>> Seen = new();
+        public int Port { get; }
+
+        public Server(Func<string, Dictionary<string, string>, (int, Dictionary<string, string>, byte[])> handle)
+        {
+            this.handle = handle;
+            listener = new TcpListener(IPAddress.Loopback, 0);  // reached as both "localhost" and "127.0.0.1"
+            listener.Start();
+            Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            _ = Task.Run(Loop);
+        }
+
+        async Task Loop()
+        {
+            while (true)
+            {
+                TcpClient c;
+                try { c = await listener.AcceptTcpClientAsync(); } catch { return; }
+                _ = Task.Run(() => Serve(c));
+            }
+        }
+
+        async Task Serve(TcpClient c)
+        {
+            using var _ = c;
+            var s = c.GetStream();
+            var reader = new StreamReader(s, Encoding.ASCII);
+            while (true)
+            {
+                var first = await reader.ReadLineAsync();
+                if (string.IsNullOrEmpty(first)) return;
+                var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                string? line;
+                while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync()))
+                {
+                    var i = line.IndexOf(':');
+                    headers[line[..i].Trim()] = line[(i + 1)..].Trim();
+                }
+                lock (Seen) Seen.Add(headers);
+                var (code, h, body) = handle(first.Split(' ')[1], headers);
+                var sb = new StringBuilder($"HTTP/1.1 {code} X\r\nContent-Length: {body.Length}\r\n");
+                foreach (var kv in h) sb.Append($"{kv.Key}: {kv.Value}\r\n");
+                sb.Append("\r\n");
+                try
+                {
+                    await s.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString()));
+                    await s.WriteAsync(body);
+                }
+                catch { return; }
+            }
+        }
+
+        public void Dispose() => listener.Stop();
+    }
+
+    /// <summary>Serves `content` with byte ranges and the given ETag.</summary>
+    static (int, Dictionary<string, string>, byte[]) Ranged(byte[] content, string etag, Dictionary<string, string> req)
+    {
+        var h = new Dictionary<string, string> { ["ETag"] = etag, ["Accept-Ranges"] = "bytes" };
+        if (req.TryGetValue("If-Range", out var ir) && ir != etag) return (200, h, content);
+        if (!req.TryGetValue("Range", out var r)) return (200, h, content);
+        var parts = r["bytes=".Length..].Split('-');
+        var from = long.Parse(parts[0]);
+        var to = parts[1].Length > 0 ? long.Parse(parts[1]) : content.Length - 1;
+        h["Content-Range"] = $"bytes {from}-{to}/{content.Length}";
+        return (206, h, content[(int)from..((int)to + 1)]);
+    }
+
+    static async Task<DownloadRecord> Run(IDownloader t)
+    {
+        var done = new TaskCompletionSource();
+        t.Changed += r => { if (r.Status is DownloadStatus.Finished or DownloadStatus.Failed) done.TrySetResult(); };
+        await t.StartAsync();
+        await Task.WhenAny(done.Task, Task.Delay(20000));
+        return t.Record;
+    }
+
+    static string TempFolder() => Directory.CreateTempSubdirectory("ndm-test").FullName;
+
+    [Fact]
+    public async Task RedirectToAnotherHostDropsCookiesAndLogin()
+    {
+        var content = Encoding.ASCII.GetBytes("0123456789");
+        using var b = new Server((_, req) => Ranged(content, "\"v1\"", req));
+        using var a = new Server((_, _) => (302, new() { ["Location"] = $"http://127.0.0.1:{b.Port}/file.bin" }, Array.Empty<byte>()));
+        var rec = new DownloadRecord
+        {
+            Url = $"http://localhost:{a.Port}/file.bin", Folder = TempFolder(), FileName = "file.bin",
+            Cookies = "session=secret", Username = "me", Password = "pw",
+        };
+        var r = await Run(new Transfer(rec, 2, new SpeedLimiter()));
+        Assert.Equal(DownloadStatus.Finished, r.Status);
+        Assert.Equal("0123456789", File.ReadAllText(r.SavedPath!));
+        Assert.Contains(a.Seen, h => h.ContainsKey("Cookie"));  // the original host still gets them
+        Assert.DoesNotContain(b.Seen, h => h.ContainsKey("Cookie") || h.ContainsKey("Authorization"));
+    }
+
+    [Fact]
+    public async Task VideoPiecesOnOtherHostsGetNoCookiesOrLogin()
+    {
+        using var cdn = new Server((_, _) => (200, new(), Encoding.ASCII.GetBytes("PIECE")));
+        using var site = new Server((path, _) => (200, new() { ["Content-Type"] = "application/vnd.apple.mpegurl" },
+            Encoding.ASCII.GetBytes($"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nhttp://127.0.0.1:{cdn.Port}/a.ts\n#EXTINF:4,\nhttp://127.0.0.1:{cdn.Port}/b.ts\n#EXT-X-ENDLIST\n")));
+        var rec = new DownloadRecord
+        {
+            Url = $"http://localhost:{site.Port}/v.m3u8", Folder = TempFolder(), FileName = "v.mp4", IsStream = true,
+            Cookies = "session=secret", Username = "me", Password = "pw",
+        };
+        var r = await Run(new StreamTransfer(rec, 2, new SpeedLimiter()));
+        Assert.Equal(DownloadStatus.Finished, r.Status);
+        Assert.Contains(site.Seen, h => h.ContainsKey("Cookie") && h.ContainsKey("Authorization"));
+        Assert.Equal(2, cdn.Seen.Count);
+        Assert.DoesNotContain(cdn.Seen, h => h.ContainsKey("Cookie") || h.ContainsKey("Authorization"));
+    }
+
+    [Fact]
+    public async Task ResumeNeverMixesTwoVersionsOfAFile()
+    {
+        var content = Encoding.ASCII.GetBytes("BBBBBBBBBB");
+        using var server = new Server((_, req) => Ranged(content, "\"v2\"", req));
+        var rec = new DownloadRecord
+        {
+            Url = $"http://localhost:{server.Port}/f.bin", Folder = TempFolder(), FileName = "f.bin",
+            Size = 10, AcceptsRanges = true, Validator = "\"v1\"", Status = DownloadStatus.Paused,
+            Segments = new() { new Segment { Id = 0, Start = 0, End = 4, Written = 5 }, new Segment { Id = 1, Start = 5, End = 9 } },
+        };
+        var parts = Path.Combine(AppPaths.Parts, rec.Id.ToString("N"));
+        Directory.CreateDirectory(parts);
+        File.WriteAllText(Path.Combine(parts, "0.part"), "AAAAA");  // half of the old version
+        var r = await Run(new Transfer(rec, 2, new SpeedLimiter()));
+        Assert.Equal(DownloadStatus.Finished, r.Status);
+        Assert.Equal("BBBBBBBBBB", File.ReadAllText(r.SavedPath!));
+        Assert.Equal("\"v2\"", r.Validator);
+    }
+
+    [Fact]
+    public void PrivateHeaderAndRangeRules()
+    {
+        var origin = new Uri("https://files.example.com/a");
+        Assert.True(Network.SameSite(new Uri("https://FILES.example.com/b"), origin));
+        Assert.False(Network.SameSite(new Uri("http://files.example.com/b"), origin));  // no step down to http
+        Assert.False(Network.SameSite(new Uri("https://cdn.example.com/b"), origin));
+        Assert.False(Network.SameSite(new Uri("https://files.example.com:8443/b"), origin));
+        Assert.True(Network.RangeMatches(new ContentRangeHeaderValue(5, 9, 10), 5, 10));
+        Assert.False(Network.RangeMatches(new ContentRangeHeaderValue(0, 4, 10), 5, 10));  // wrong part
+        Assert.False(Network.RangeMatches(new ContentRangeHeaderValue(5, 9, 99), 5, 10));  // another file
+        Assert.False(Network.RangeMatches(null, 5, 10));
+        Assert.True(Network.SameVersion(null, "\"x\""));
+        Assert.False(Network.SameVersion("\"a\"", "\"b\""));
+        var creds = Network.CredentialsFor(origin, new NetworkCredential("u", "p"));
+        Assert.NotNull(creds.GetCredential(new Uri("https://files.example.com/x"), "Basic"));
+        Assert.Null(creds.GetCredential(new Uri("https://evil.example.net/x"), "Basic"));
+    }
+}
