@@ -8,7 +8,21 @@ public static class Updates
 {
     public const string LatestUrl = "https://api.github.com/repos/Shahrukhalid/nexonic-download-manager/releases/latest";
 
-    public sealed record Release(string Version, string Notes, string Page, IReadOnlyDictionary<string, string> Assets);
+    public sealed record Release(string Version, string Notes, string Page, IReadOnlyDictionary<string, string> Assets,
+        IReadOnlyDictionary<string, string>? Digests = null);
+
+    /// <summary>Only files attached to this app's own GitHub releases are ever downloaded as updates.</summary>
+    public static bool TrustedAsset(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps && u.Host == "github.com"
+        && u.AbsolutePath.StartsWith("/Shahrukhalid/nexonic-download-manager/releases/download/", StringComparison.Ordinal);
+
+    /// <summary>The SHA-256 GitHub publishes for an attached file, or null.</summary>
+    public static string? Digest(Release r, string asset) =>
+        r.Digests != null && r.Digests.TryGetValue(asset, out var d) && d.Length == 64 ? d : null;
+
+    /// <summary>True when the downloaded file is exactly the one GitHub published.</summary>
+    public static bool Verify(string path, string sha256) =>
+        string.Equals(Checksum.Compute(ChecksumAlgorithm.Sha256, path), sha256, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Reads the GitHub "latest release" answer.</summary>
     public static Release? Parse(string json)
@@ -21,13 +35,20 @@ public static class Updates
             if (o.TryGetProperty("draft", out var d) && d.ValueKind == JsonValueKind.True) return null;
             if (o.TryGetProperty("prerelease", out var p) && p.ValueKind == JsonValueKind.True) return null;
             var assets = new Dictionary<string, string>();
+            var digests = new Dictionary<string, string>();
             if (o.TryGetProperty("assets", out var list) && list.ValueKind == JsonValueKind.Array)
                 foreach (var a in list.EnumerateArray())
                     if (a.TryGetProperty("name", out var n) && a.TryGetProperty("browser_download_url", out var u))
+                    {
                         assets[n.GetString() ?? ""] = u.GetString() ?? "";
+                        // GitHub's own checksum of the file ("sha256:…")
+                        if (a.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String
+                            && dg.GetString() is { } ds && ds.StartsWith("sha256:", StringComparison.Ordinal))
+                            digests[n.GetString() ?? ""] = ds["sha256:".Length..].ToLowerInvariant();
+                    }
             var version = (tag.GetString() ?? "").TrimStart('v');
             var body = o.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() ?? "" : "";
-            return new Release(version, body, page.GetString() ?? "", assets);
+            return new Release(version, body, page.GetString() ?? "", assets, digests);
         }
         catch { return null; }
     }

@@ -9,6 +9,19 @@ public enum Updates {
         public var notes: String
         public var page: URL
         public var assets: [String: URL]
+        public var digests: [String: String] = [:]  // GitHub's SHA-256 of each attached file
+    }
+
+    /// Only files attached to this app's own GitHub releases are ever downloaded as updates.
+    public static func trustedAsset(_ url: URL) -> Bool {
+        url.scheme == "https" && url.host == "github.com"
+            && url.path.hasPrefix("/Shahrukhalid/nexonic-download-manager/releases/download/")
+    }
+
+    /// True when the downloaded file is exactly the one GitHub published.
+    public static func verify(_ file: URL, sha256: String) -> Bool {
+        guard let actual = try? Checksum.compute(.sha256, file: file) else { return false }
+        return actual.lowercased() == sha256.lowercased()
     }
 
     /// Reads the GitHub "latest release" answer.
@@ -18,13 +31,15 @@ public enum Updates {
               let page = (o["html_url"] as? String).flatMap(URL.init(string:)) else { return nil }
         if o["draft"] as? Bool == true || o["prerelease"] as? Bool == true { return nil }
         var assets: [String: URL] = [:]
+        var digests: [String: String] = [:]
         for a in o["assets"] as? [[String: Any]] ?? [] {
             if let name = a["name"] as? String, let url = (a["browser_download_url"] as? String).flatMap(URL.init(string:)) {
                 assets[name] = url
+                if let d = a["digest"] as? String, d.hasPrefix("sha256:") { digests[name] = String(d.dropFirst(7)).lowercased() }
             }
         }
         let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
-        return Release(version: version, notes: o["body"] as? String ?? "", page: page, assets: assets)
+        return Release(version: version, notes: o["body"] as? String ?? "", page: page, assets: assets, digests: digests)
     }
 
     /// True when `a` is a higher version than `b` ("0.6.0" > "0.5.9", "0.10.0" > "0.9.1").
