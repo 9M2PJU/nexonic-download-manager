@@ -1,0 +1,68 @@
+name: Android
+on:
+  push:
+    branches: [main, feature/mobile-platforms]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Release signing key (only when the secrets are set)
+        env:
+          KEYSTORE_B64: ${{ secrets.NDM_ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "NDM_ANDROID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Tests
+        run: gradle -p android --no-daemon testDebugUnitTest
+      - name: Build the APKs
+        env:
+          NDM_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.NDM_ANDROID_KEYSTORE_PASSWORD }}
+          NDM_ANDROID_KEY_ALIAS: nexonic # not a secret; as a secret GitHub would hide every "nexonic" in the logs
+          NDM_ANDROID_KEY_PASSWORD: ${{ secrets.NDM_ANDROID_KEY_PASSWORD }}
+        run: gradle -p android --no-daemon assembleDebug assembleRelease
+      - name: Check the APKs
+        run: |
+          set -e
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/NexonicDownloadManager-Android-debug.apk
+          rel=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          cp "$rel" out/NexonicDownloadManager-Android-release$( [[ "$rel" == *unsigned* ]] && echo -unsigned ).apk
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          AAPT="$BT/aapt2"
+          if ls out/*release.apk >/dev/null 2>&1; then
+            echo "Release APK signature:"
+            "$BT/apksigner" verify --verbose --print-certs out/NexonicDownloadManager-Android-release.apk | grep -E "Verified using|Signer #1 certificate DN|SHA-256 digest"
+          else
+            echo "Release APK is unsigned: set the NDM_ANDROID_* secrets (android/setup-android-signing.sh)."
+          fi
+          "$AAPT" dump badging out/NexonicDownloadManager-Android-debug.apk | grep -E "^package|sdkVersion|targetSdk"
+          "$AAPT" dump permissions out/NexonicDownloadManager-Android-debug.apk
+          ls -la out
+          sha256sum out/*.apk
+      - name: Test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: android/app/build/reports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NexonicDownloadManager-Android
+          path: out/*.apk
