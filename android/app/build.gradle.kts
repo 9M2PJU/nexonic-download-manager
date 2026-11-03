@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Release builds make one APK per processor type (see splits below); run them on their own, not together with debug.
+val releaseBuild = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+
 android {
     namespace = "com.nexonic.downloadmanager"
     compileSdk = 35
@@ -17,6 +20,20 @@ android {
         val (major, minor, patch) = version.split(".").map { it.takeWhile(Char::isDigit).ifEmpty { "0" }.toInt() }
         versionCode = major * 10000 + minor * 100 + patch
         versionName = version
+        // The video engine (Python, yt-dlp, ffmpeg) is native code. Debug builds: phones (ARM) plus x86_64 for emulators.
+        // Release builds pick their processor types with the splits below (Gradle refuses both at once).
+        if (!releaseBuild) ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+    }
+
+    // The engine is about 50 MB per processor type, so the release is one APK per type: arm64 (almost every phone)
+    // and 32-bit ARM (older phones). Debug builds stay a single APK for every type (emulators, screenshots).
+    splits {
+        abi {
+            isEnable = releaseBuild
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
     }
 
     // Release signing comes from the environment (GitHub secrets); keys are never stored in the repository.
@@ -55,7 +72,11 @@ android {
         compose = true
         buildConfig = true
     }
-    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+    packaging {
+        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        // The video engine runs its programs from the installed native libraries, so they must be unpacked.
+        jniLibs { useLegacyPackaging = true }
+    }
     testOptions { unitTests.isReturnDefaultValues = true }
     lint {
         abortOnError = false
@@ -72,6 +93,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // Video engine: yt-dlp (with Python) and ffmpeg, the same engine as the Mac and Windows apps.
+    val youtubedlAndroid = "0.18.1"
+    implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlAndroid")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubedlAndroid")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
