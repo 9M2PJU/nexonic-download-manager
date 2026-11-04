@@ -4,9 +4,9 @@ name: iOS
 on:
   push:
     branches: [main, feature/mobile-platforms]
-    paths: ["ios/**", "mac/Sources/NexonicCore/**", "android/demo/page.html", ".github/workflows/ios.yml"]
+    paths: ["VERSION", "ios/**", "mac/Sources/NexonicCore/**", "android/demo/page.html", ".github/workflows/ios.yml"]
   pull_request:
-    paths: ["ios/**", "mac/Sources/NexonicCore/**", ".github/workflows/ios.yml"]
+    paths: ["VERSION", "ios/**", "mac/Sources/NexonicCore/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -53,6 +53,7 @@ jobs:
           (cd "$(dirname "$APP")" && zip -qry "$GITHUB_WORKSPACE/out/Nexonic-simulator.app.zip" Nexonic.app)
           ls -la out
       - name: Screenshots (iPhone and iPad)
+        if: github.event_name != 'pull_request'
         timeout-minutes: 30
         continue-on-error: true
         run: |
