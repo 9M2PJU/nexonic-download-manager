@@ -30,3 +30,15 @@ The native test creates legal deterministic data, seeds it over loopback, previe
 selected payload, pauses, destroys/recreates the native context, resumes from checkpoints, verifies pieces and final
 SHA-256, modifies trackers and checks safe removal. Desktop CI runs it on Windows, macOS and both Linux architectures.
 Mobile wrapper/device tests are required separately before claiming Android or iPhone/iPad completion.
+
+### .NET hosts
+
+`windows/Core/Torrents/NativeTorrentSession.cs` owns the C ABI session and serializes calls/disposal. Production loading uses only the application directory. `TorrentSource.ReadMetadataAsync` resolves local/HTTP(S) descriptors with an 8 MiB limit and bounded redirects; the bytes still require native validation and never represent a completed payload.
+
+The managed real-transfer test uses two native sessions, generated legal data, loopback peers, Unicode paths, magnet metadata, file selection, checkpoint/restart, final SHA-256 and safe removal:
+
+```
+dotnet run --project native/tests/dotnet -- /absolute/path/to/libnexonic_torrent.so
+```
+
+Use `nexonic_torrent.dll` on Windows or `libnexonic_torrent.dylib` for a shared macOS test build. The Apple SDK itself remains static. This adapter does not yet switch the shipped app frontend from its existing provider.
