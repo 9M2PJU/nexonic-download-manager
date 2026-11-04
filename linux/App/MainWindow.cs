@@ -57,7 +57,7 @@ public sealed class MainWindow : Window
         RestorePlace();
 
         list.ItemsSource = view;
-        list.ItemTemplate = new FuncDataTemplate<Row>((row, _) => RowView(row), supportsRecycling: false);
+        list.ItemTemplate = RowTemplate;
         list.Styles.Add(new Style(x => x.OfType<ListBoxItem>())
         {
             Setters = { new Setter(ListBoxItem.PaddingProperty, new Thickness(10, 5)), new Setter(ListBoxItem.MinHeightProperty, 34.0) },
@@ -70,8 +70,10 @@ public sealed class MainWindow : Window
 
         Content = BuildLayout();
         BuildSidebar();
-        manager.Queues.CollectionChanged += (_, _) => BuildSidebar();
-        manager.Rows.CollectionChanged += (_, _) => Refilter();
+        // Rebuild after the change has finished: rebuilding the list inside the change notification crashed the app
+        // when a download was added while another one was listed (found by linux/packaging/smoke.py).
+        manager.Queues.CollectionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(BuildSidebar);
+        manager.Rows.CollectionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => Refilter());
 
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.N, KeyModifiers.Control), Command = new Cmd(() => _ = OnAdd()) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.F, KeyModifiers.Control), Command = new Cmd(() => search.Focus()) });
@@ -294,8 +296,12 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>One row of the table; it updates itself when the download changes.</summary>
-    Control RowView(Row row)
+    internal static readonly FuncDataTemplate<Row> RowTemplate = new((row, _) => RowView(row), supportsRecycling: false);
+
+    static Control? RowView(Row? row)
     {
+        // Avalonia builds the template with null when clearing a recycled item container.
+        if (row is null) return null;
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions(Columns), Background = Brushes.Transparent };
         var nameCell = new DockPanel { Margin = new Thickness(0, 0, 6, 0) };
         var badge = Ui.FileBadge(row.Name, 22);
