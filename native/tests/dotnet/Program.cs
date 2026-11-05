@@ -41,6 +41,13 @@ try
     seed.Invoke(new { action = "resume", id = "seed" });
     var seedStatus = await Wait(seed, "seed", s => s.GetProperty("state").GetString() == "seeding");
     var port = seed.Invoke(new { action = "list" }).GetProperty("listen_port").GetInt32();
+    // connect_peer is a one-shot hint (no DHT or trackers here): repeat it each second until a peer is attached.
+    var ticks = 0;
+    bool Hint(NativeTorrentSession engine, string id, JsonElement s)
+    {
+        if (s.GetProperty("peers").GetInt32() == 0 && ++ticks % 10 == 0) engine.Invoke(new { action = "connect_peer", id, port });
+        return true;
+    }
     var files = seedStatus.GetProperty("files").EnumerateArray().ToArray();
     var priorities = files.Select(f => f.GetProperty("path").GetString()!.EndsWith("selected.bin") ? 7 : 0).ToArray();
     var stateDirectory = Path.Combine(root, "downloader-state");
@@ -49,7 +56,7 @@ try
     {
         client.Invoke(new { action = "add", id = "preview", source = seedStatus.GetProperty("magnet").GetString() });
         client.Invoke(new { action = "connect_peer", id = "preview", port });
-        var preview = await Wait(client, "preview", s => s.GetProperty("state").GetString() == "preview");
+        var preview = await Wait(client, "preview", s => Hint(client, "preview", s) && s.GetProperty("state").GetString() == "preview");
         Require(!preview.GetProperty("payload_complete").GetBoolean(), "Metadata falsely completed content");
         bool refused = false;
         try { client.Invoke(new { action = "resume", id = "preview" }); } catch (InvalidOperationException) { refused = true; }
@@ -59,7 +66,7 @@ try
             preview = false, destination, priorities, download_limit = 262144 });
         client.Invoke(new { action = "resume", id = "download" });
         client.Invoke(new { action = "connect_peer", id = "download", port });
-        await Wait(client, "download", s => s.GetProperty("received").GetInt64() > 65536);
+        await Wait(client, "download", s => Hint(client, "download", s) && s.GetProperty("received").GetInt64() > 65536);
         client.Invoke(new { action = "pause", id = "download" });
         client.Invoke(new { action = "flush" });
     }
@@ -69,7 +76,7 @@ try
         client.Invoke(new { action = "configure", id = "download", download_limit = 0 });
         client.Invoke(new { action = "resume", id = "download" });
         client.Invoke(new { action = "connect_peer", id = "download", port });
-        var complete = await Wait(client, "download", s => s.GetProperty("state").GetString() == "complete");
+        var complete = await Wait(client, "download", s => Hint(client, "download", s) && s.GetProperty("state").GetString() == "complete");
         Require(complete.GetProperty("payload_complete").GetBoolean(), "Final verification missing");
         var selectedPath = files.Single(f => f.GetProperty("path").GetString()!.EndsWith("selected.bin")).GetProperty("path").GetString()!;
         var expected = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
