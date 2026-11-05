@@ -1,3 +1,19 @@
+## 0.10.0
+
+- **Torrents on Windows and Linux:** a built-in torrent engine (libtorrent 2.0.11) replaces the optional Linux Python
+  bridge; nothing extra to install. Open **Torrents → Add Torrent** and add a `.torrent` file, an HTTP(S) torrent link or
+  a magnet link. Torrents stay off until you enable them.
+- Preview the name, hash and files before downloading; choose Skip/Low/Normal/High per file, a destination and a queue.
+- Progress, peers, seeds, speeds, ETA and ratio; pause/resume, per-torrent speed caps, DHT, tracker edits and optional
+  seeding with ratio/time limits (off by default).
+- Every piece is checked during the download and again before completion, then each selected file gets a SHA-256.
+  Checkpoints survive restarts and crashes; removing a torrent keeps its files.
+- Fixed: a damaged download list could be backed up more than once on Mac and Windows.
+- Limits: system/custom proxies, the shared global speed limit and DNS over HTTPS are not used for torrents (they pause
+  instead of bypassing your settings). Peers and trackers can see your IP address. Mac, Android and iPhone/iPad torrent
+  support is still in development and not part of this release.
+- Application identifiers, settings, download history and update compatibility are unchanged.
+
 ## 0.9.1
 
 - Replace application artwork with the official white tile, gradient N, orbital swoosh and blue download arrow on Windows, macOS, Linux, Android, iPhone/iPad and browser extensions.

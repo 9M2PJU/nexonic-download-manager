@@ -33,13 +33,19 @@ $exe = Join-Path $env:LOCALAPPDATA 'Programs/Nexonic Download Manager/NexonicDow
 function Install-And-Check([string]$Setup, [string]$Expected) {
     $log = Join-Path $env:RUNNER_TEMP "nexonic-upgrade-$Expected.log"
     Write-Host "Installing and checking $Expected"
+    function Step([string]$m) { Write-Host ("  [{0:HH:mm:ss}] {1}" -f (Get-Date), $m) }
+    # A hung installer or app must fail this check with details, never stall the job.
+    $watchdog = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList @('-NoProfile','-Command',
+        "Start-Sleep 420; Get-Process | Where-Object { `$_.ProcessName -match 'Nexonic|Setup|\.tmp' } | Stop-Process -Force -ErrorAction SilentlyContinue")
     $setupProcess = Start-Process $Setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=`"$log`"") -PassThru
     # Start-Process -Wait includes the auto-launched app's lifetime. Wait only for the installer.
+    Step "installer started (pid $($setupProcess.Id))"
     if (-not $setupProcess.WaitForExit(180000)) {
         $setupProcess.Kill($true)
         throw "Installer timed out: $log"
     }
-    if ($setupProcess.ExitCode -ne 0) { throw "Installer returned $($setupProcess.ExitCode): $log" }
+    Step "installer finished with $($setupProcess.ExitCode)"
+    if ($setupProcess.ExitCode -ne 0) { Get-Content $log -Tail 40 -ErrorAction SilentlyContinue; throw "Installer returned $($setupProcess.ExitCode): $log" }
     # Inno's silent update path starts the app. Require it to stay alive before inspecting persisted data.
     $app = $null
     for ($attempt=0; $attempt -lt 20; $attempt++) {
@@ -48,11 +54,13 @@ function Install-And-Check([string]$Setup, [string]$Expected) {
         Start-Sleep -Seconds 1
     }
     if (-not $app) { throw "The $Expected app did not start after installation." }
+    Step "app started"
     Start-Sleep -Seconds 5
     $app = Get-Process NexonicDownloadManager -ErrorAction SilentlyContinue
     if (-not $app) { throw "The $Expected app quit during startup." }
     $app | Stop-Process -Force
     $app | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+    Step "app stopped"
     $found = [Diagnostics.FileVersionInfo]::GetVersionInfo($exe).ProductVersion
     if (-not $found.StartsWith($Expected)) { throw "Expected $Expected installed, found $found" }
     $data = @(Get-Content (Join-Path $support 'downloads.json') -Raw | ConvertFrom-Json)
@@ -64,6 +72,7 @@ function Install-And-Check([string]$Setup, [string]$Expected) {
     $queues = @(Get-Content (Join-Path $support 'queues.json') -Raw | ConvertFrom-Json)
     if (-not ($queues | Where-Object { $_.Id -eq 'night-v081' -and $_.Name -eq 'Night' -and $_.Running -eq $false })) { throw 'Upgrade lost the saved queue.' }
     if (-not (Test-Path 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Uninstall/{6F1C2E4B-8B7D-4C55-9E2A-3D9B1F0A7C21}_is1')) { throw 'Installer identity changed.' }
+    $watchdog | Stop-Process -Force -ErrorAction SilentlyContinue
     Write-Host "PASS $Expected installed and starts; paused history, queue, settings, part-file hash and installer identity preserved."
 }
 Install-And-Check $old '0.8.1'
