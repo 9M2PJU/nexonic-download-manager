@@ -45,7 +45,7 @@ jobs:
             .native-cache/installed
             .native-cache/binaries
             .native-cache/vcpkg/downloads
-          key: native-linux-${{ matrix.arch }}-${{ hashFiles('native/vcpkg.json') }}
+          key: native-linux-${{ matrix.arch }}-${{ hashFiles('native/vcpkg.json', 'native/triplets/**') }}
       - name: Native torrent engine and legal-data transfer
         run: python3 scripts/build-torrent-native.py linux-${{ matrix.arch }} --test
       - name: Managed provider integration
