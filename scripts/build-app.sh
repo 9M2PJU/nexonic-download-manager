@@ -11,8 +11,23 @@ if [ "${UNIVERSAL:-1}" != "0" ] && xcodebuild -version >/dev/null 2>&1; then ARC
 
 if [ "${#ARCHS[@]}" -gt 0 ]; then python3 scripts/build-torrent-apple.py --universal-mac; else python3 scripts/build-torrent-apple.py; fi
 
-swift build --package-path mac -c release ${ARCHS[@]+"${ARCHS[@]}"}
-BIN="$(swift build --package-path mac -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
+if [ "${#ARCHS[@]}" -gt 0 ]; then
+    # One build per chip, then lipo. A single two-chip SwiftPM build prelinks each module into one object, and the
+    # current Apple linker drops Swift class data there ("null objc class data" for the torrent module).
+    BIN="mac/.build/universal-release"
+    rm -rf "$BIN" && mkdir -p "$BIN"
+    PARTS=()
+    for TRIPLE in arm64-apple-macosx13.0 x86_64-apple-macosx13.0; do
+        swift build --package-path mac -c release --triple "$TRIPLE"
+        PARTS+=("$(swift build --package-path mac -c release --triple "$TRIPLE" --show-bin-path)")
+    done
+    for P in NexonicDownloadManager nexonic-host; do
+        lipo -create "${PARTS[0]}/$P" "${PARTS[1]}/$P" -output "$BIN/$P"
+    done
+else
+    swift build --package-path mac -c release
+    BIN="$(swift build --package-path mac -c release --show-bin-path)"
+fi
 
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 python3 scripts/build-extensions.py
