@@ -1,4 +1,4 @@
-# Nexonic Download Manager 0.11.0
+# Nexonic Download Manager 0.11.1
 
 **New: torrents on Mac**, joining Windows and Linux, all with the same built-in engine (no extra install). Click **Torrents** in the toolbar, turn torrents on, then add a magnet, a torrent link or a `.torrent` file. Preview files, pick what to download, pause/resume, limit speeds and optionally seed. Every finished file is piece-checked and gets a SHA-256. Android and iPhone/iPad torrents are still in development. Android APK licensing and corresponding-source requirements remain unchanged; the release must include `Android-GPL-Sources.tar.gz`.
 
