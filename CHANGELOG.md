@@ -1,3 +1,15 @@
+## 0.11.0
+
+- **Torrents on Mac:** the same built-in engine as Windows and Linux. Click **Torrents** in the toolbar, turn torrents
+  on, and add a magnet link, a link to a `.torrent` file or a `.torrent` file from your Mac. Preview the files first,
+  choose Skip/Low/Normal/High for each, pick a folder and queue, set download/upload limits, and optionally keep
+  seeding until a ratio or time limit.
+- Torrents use the existing queues and scheduler on Mac; seeding doesn't take a download slot. Every piece is checked
+  and each finished file gets a SHA-256. Torrents stay off until you turn them on.
+- Limits: proxies, the shared global speed limit and DNS over HTTPS are not used for torrents; peers and trackers can
+  see your IP address. Android and iPhone/iPad torrent support is still in development and not part of this release.
+- Application identifiers, settings, download history and update compatibility are unchanged.
+
 ## 0.10.0
 
 - **Torrents on Windows and Linux:** a built-in torrent engine (libtorrent 2.0.11) replaces the optional Linux Python
