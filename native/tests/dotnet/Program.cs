@@ -17,7 +17,13 @@ async Task<JsonElement> Wait(NativeTorrentSession engine, string id, Func<JsonEl
         var state = engine.Invoke(new { action = "status", id });
         Require(state.GetProperty("state").GetString() != "failed", state.GetProperty("error").GetString() ?? "Torrent failed");
         if (condition(state)) return state;
-        await Task.Delay(100, timeout.Token);
+        try { await Task.Delay(100, timeout.Token); }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            var diagnostic = state.Deserialize<Dictionary<string, JsonElement>>()!;
+            diagnostic.Remove("metainfo");
+            throw new TimeoutException($"Waiting for {id}: {JsonSerializer.Serialize(diagnostic)}");
+        }
     }
 }
 try
