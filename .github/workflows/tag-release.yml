@@ -1,0 +1,34 @@
+name: Tag release
+# When VERSION changes on main, creates the tag vX.Y.Z (once) and starts the Release and Android release workflows for it.
+# Tags made with the workflow token start no push-triggered runs, so both workflows are started here directly.
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency: tag-release
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate versions and changelog
+        run: python3 scripts/check-release.py
+      - name: Create the tag and start the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag already exists; nothing to do"
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          gh workflow run release.yml --ref "$tag"
+          gh workflow run android-release.yml --ref "$tag" -f tag="$tag"
+          echo "Tagged $tag at $GITHUB_SHA and started the release workflows"

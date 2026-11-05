@@ -1,6 +1,6 @@
-# Native torrent downloads (development branch)
+# Torrent downloads
 
-The published **v0.9.0** Linux app uses the earlier optional Python/libtorrent bridge. This branch replaces that dependency with a bundled libtorrent 2.0.11 engine on Windows and Linux. These changes are under review and have not been released. macOS, Android and iPhone/iPad frontend integration remains in progress.
+Since **v0.10.0**, Windows and Linux use a bundled libtorrent 2.0.11 engine; the earlier optional Python bridge of v0.9.0 is no longer needed. macOS, Android and iPhone/iPad integration is still in development.
 
 ## Using the Windows/Linux Torrent Manager
 
@@ -24,4 +24,4 @@ Removing a task retains payload files, including partial files. Multi-file torre
 
 `native/tests/engine_test.cpp` transfers generated legal files between real loopback peers, tests metadata-only safeguards, magnets, selection, pause/restart checkpoints, tracker changes, piece checks and SHA-256. `native/tests/dotnet` repeats real transfers through the managed C ABI, UTF-8 paths, concurrent polling and disposal, then tests the actual queue provider resolving an HTTP descriptor into verified payload contents. Native CI covers Windows, macOS, Linux x64 and ARM64; app CI exercises bundled Windows/Linux providers. Device/emulator frontend testing is still required for mobile integration. Tests opt into loopback peers explicitly; production sessions do not.
 
-The engine is [libtorrent-rasterbar](https://www.libtorrent.org/), whose [BSD license and embedded notices](https://github.com/arvidn/libtorrent/blob/v2.0.11/COPYING) are included alongside its dependencies' notices. Existing application licenses and Android GPL obligations remain unchanged. No new release, package submission or next milestone is authorized by this work.
+The engine is [libtorrent-rasterbar](https://www.libtorrent.org/), whose [BSD license and embedded notices](https://github.com/arvidn/libtorrent/blob/v2.0.11/COPYING) are included alongside its dependencies' notices. Existing application licenses and Android GPL obligations remain unchanged.
