@@ -1,6 +1,6 @@
 namespace Nexonic.Core;
 
-public enum DownloadStatus { Queued, Probing, Downloading, Paused, Finished, Failed }
+public enum DownloadStatus { Queued, Probing, Downloading, Paused, Finished, Failed, Seeding }
 
 /// <summary>One byte range. End is inclusive; -1 means "until the server stops" (size unknown).</summary>
 public sealed class Segment
@@ -73,7 +73,7 @@ public sealed class DownloadRecord
         ? (StreamTotal is > 0 ? Math.Min(1, (double)(StreamDone ?? 0) / StreamTotal.Value) : 0)
         : Size is > 0 ? Math.Min(1, (double)Received / Size.Value) : 0;
     public FileCategory Category => FileCategories.Of(FileName);
-    public bool IsActive => Status is DownloadStatus.Probing or DownloadStatus.Downloading;
+    public bool IsActive => Status is DownloadStatus.Probing or DownloadStatus.Downloading or DownloadStatus.Seeding;
     public string Queue => QueueId ?? DownloadQueue.MainId;
 }
 
@@ -162,7 +162,7 @@ public static class FileTypes
 
 public sealed class AppSettings
 {
-    /// <summary>Optional Linux libtorrent runtime; off for existing and new installations.</summary>
+    /// <summary>Bundled native libtorrent engine; off for existing and new installations.</summary>
     public bool TorrentsEnabled { get; set; }
     public int Connections { get; set; } = 8;
     public int MaxActive { get; set; } = 3;

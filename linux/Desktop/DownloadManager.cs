@@ -140,6 +140,7 @@ public sealed partial class DownloadManager
         var start = job.Start ?? (profile?.StartAtOnce == false ? false : o.Start);
         var rec = new DownloadRecord
         {
+            Torrent = SmartDownload.Detect(job.Url) == DownloadEngine.Torrent ? new TorrentMetadata { MetadataPending = true } : null,
             Url = job.Url, Referrer = job.Referrer, Cookies = job.Cookies, UserAgent = profile?.UserAgent is { Length: > 0 } ua ? ua : job.UserAgent,
             Folder = chosenFolder ?? Settings.Folder,
             FileName = name,
@@ -184,12 +185,16 @@ public sealed partial class DownloadManager
         // Validate a copy before altering a running task or its previous selection.
         var candidate = new TorrentMetadata { Files = torrent.Files, FilePriorities = priorities.ToList() };
         var selectedSize = candidate.SelectedSize;
+        var changed = !torrent.Priorities().SequenceEqual(candidate.Priorities());
         Pause(row);
         torrent.FilePriorities = candidate.FilePriorities;
-        torrent.Received = 0; // Native verified progress is refreshed on Resume, not reused for another selection.
+        if (changed)
+        {
+            torrent.PayloadComplete = false; torrent.CompletionNotified = false; torrent.Sha256.Clear();
+            torrent.Received = 0; // The new selection must be verified again.
+            row.Record.SavedPath = null; row.Record.Finished = null;
+        }
         row.Record.Size = selectedSize;
-        row.Record.SavedPath = null;
-        row.Record.Finished = null;
         row.Record.Status = DownloadStatus.Paused;
         row.Refresh();
         Save();
@@ -446,7 +451,7 @@ public sealed partial class DownloadManager
         foreach (var q in Queues.Where(q => q.Running).ToList())
         {
             var limit = q.IsMain ? Settings.MaxActive : q.MaxActive;
-            var slots = Math.Max(1, limit) - transfers.Values.Count(t => t.Record.Queue == q.Id);
+            var slots = Math.Max(1, limit) - transfers.Values.Count(t => t.Record.Queue == q.Id && t.Record.Status != DownloadStatus.Seeding);
             foreach (var row in Rows.Reverse().Where(r => r.Record.Queue == q.Id && r.Record.Status == DownloadStatus.Queued).ToList())
             {
                 if (slots-- <= 0) break;
@@ -466,11 +471,18 @@ public sealed partial class DownloadManager
 
     void Changed(Row row, DownloadRecord rec, IDownloader t)
     {
-        row.Refresh();
-        if (rec.Status is not (DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused)) return;
         if (!transfers.TryGetValue(rec.Id, out var current) || current != t) return; // already stopped by the app
+        row.Refresh();
+        if (rec.Torrent is { PayloadComplete: true, CompletionNotified: false } torrent)
+        {
+            torrent.CompletionNotified = true;
+            AfterDownload(rec);
+            Save();
+            if (rec.Status == DownloadStatus.Seeding) Schedule();
+        }
+        if (rec.Status is not (DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused)) return;
         transfers.Remove(rec.Id);
-        if (rec.Status == DownloadStatus.Finished) AfterDownload(rec);
+        if (rec.Status == DownloadStatus.Finished && rec.Torrent == null) AfterDownload(rec);
         if (rec.Status == DownloadStatus.Failed) Notify?.Invoke("Download failed", $"{rec.FileName}: {rec.Error}");
         Save();
         Schedule();
@@ -619,6 +631,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
         DownloadStatus.Queued => L.T("Queued"),
         DownloadStatus.Probing => L.T("Connecting…"),
         DownloadStatus.Downloading => $"{Percent:0}%",
+        DownloadStatus.Seeding => "Seeding",
         DownloadStatus.Paused => L.T(Record.AwaitingRefresh == true ? "Waiting for link" : "Stopped"),
         DownloadStatus.Finished => L.T(Record.ChecksumResult?.Contains("not") == true ? "Checksum failed" : "Complete"),
         _ => L.T("Error"),
@@ -627,7 +640,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
     /// <summary>Status colour (#RRGGBB), the same as the Windows app's.</summary>
     public string StatusColor => Record.Status switch
     {
-        DownloadStatus.Downloading or DownloadStatus.Probing => StatusColors.Accent,
+        DownloadStatus.Downloading or DownloadStatus.Probing or DownloadStatus.Seeding => StatusColors.Accent,
         DownloadStatus.Queued => StatusColors.Waiting,
         DownloadStatus.Paused => StatusColors.Idle,
         DownloadStatus.Finished => Record.ChecksumResult?.Contains("not") == true ? StatusColors.Bad : StatusColors.Good,

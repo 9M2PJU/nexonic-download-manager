@@ -37,8 +37,8 @@ Download faster, pause and resume anytime, and save videos from YouTube, Instagr
 | Chrome, Edge, Brave, Opera extension | [NexonicExtension-Chrome.zip](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicExtension-Chrome.zip) |
 | Firefox add-on | [NexonicAddon-Firefox.xpi](https://github.com/Shahrukhalid/nexonic-download-manager/releases/latest/download/NexonicAddon-Firefox.xpi) |
 
-The standard file and video engines are included. Experimental Linux torrents in v0.9.0 and later additionally
-require system `python3-libtorrent` (2.x) and explicit opt-in; see [the torrent guide](docs/TORRENTS.md).
+The standard file and video engines are included. The published v0.9.0 Linux torrent provider requires
+system `python3-libtorrent` (2.x) and explicit opt-in. The unreleased Windows/Linux native provider bundles its engine; see [the torrent guide](docs/TORRENTS.md).
 
 Windows with [Scoop](https://scoop.sh): `scoop bucket add nexonic https://github.com/Shahrukhalid/nexonic-download-manager` then
 `scoop install nexonic-download-manager`. More package managers: [docs/PACKAGES.md](docs/PACKAGES.md).

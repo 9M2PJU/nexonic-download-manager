@@ -84,7 +84,7 @@ jobs:
   windows:
     needs: ffmpeg-windows
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
@@ -98,6 +98,18 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .native-cache/installed
+            .native-cache/binaries
+            .native-cache/vcpkg/downloads
+          key: native-win-x64-${{ hashFiles('native/vcpkg.json', 'native/triplets/**') }}
+      - name: Native torrent engine and legal-data transfer
+        run: python scripts/build-torrent-native.py win-x64 --test
+      - name: Managed provider integration
+        shell: pwsh
+        run: dotnet run --project native/tests/dotnet "-p:NativeTorrentLibrary=$env:GITHUB_WORKSPACE/.native-cache/sdk/win-x64/bin/nexonic_torrent.dll" -- .native-cache/sdk/win-x64/bin/nexonic_torrent.dll
       - name: Tests
         run: dotnet test windows/Tests/Tests.csproj
       - name: Build the app and installer

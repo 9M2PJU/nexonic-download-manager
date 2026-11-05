@@ -70,6 +70,9 @@
   <DockPanel>
     <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E3E8EF" BorderThickness="0,0,0,1" Padding="6,4">
       <WrapPanel>
+        <Button Style="{StaticResource ToolButton}" Click="OnTorrents" ToolTip="Torrent Manager">
+          <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE896;" /><TextBlock Style="{StaticResource Caption}" Text="Torrents" /></StackPanel>
+        </Button>
         <Button Style="{StaticResource ToolButton}" Click="OnAdd" ToolTip="Add one or more links (Ctrl+N)">
           <StackPanel><TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" /><TextBlock Style="{StaticResource Caption}" Text="Add URL" /></StackPanel>
         </Button>

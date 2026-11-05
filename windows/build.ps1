@@ -2,6 +2,8 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 $version = (Get-Content VERSION).Trim()
+python scripts/build-torrent-native.py win-x64
+if ($LASTEXITCODE -ne 0) { throw "Native torrent engine build failed" }
 $out = "build\win"
 if (Test-Path build) { Remove-Item build -Recurse -Force }
 $common = @("-c", "Release", "-r", "win-x64", "--self-contained", "true", "-p:PublishSingleFile=true",
@@ -25,6 +27,9 @@ if (Test-Path .tools-cache\windows\yt-dlp.exe) {
 } else {
   Write-Warning "No .tools-cache\windows\yt-dlp.exe: videos from YouTube and other sites will not work in this build"
 }
+Copy-Item .native-cache\sdk\win-x64\bin\nexonic_torrent.dll $out
+Copy-Item .native-cache\sdk\win-x64\notices "$out\torrent-licenses" -Recurse
+Copy-Item .native-cache\sdk\win-x64\native-components.json "$out\torrent-components.json"
 Copy-Item packaging\TERMS.txt $out
 python scripts\build-extensions.py
 if ($LASTEXITCODE -ne 0) { throw "Extension build failed" }

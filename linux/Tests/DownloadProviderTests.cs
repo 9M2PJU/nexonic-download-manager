@@ -111,7 +111,7 @@ public sealed class DownloadProviderTests
 
 public sealed class LinuxTorrentFactAttribute : FactAttribute
 {
-    public LinuxTorrentFactAttribute() { if (!OperatingSystem.IsLinux()) Skip = "Requires Linux /usr/bin/python3 and python3-libtorrent; exercised by both Linux CI architectures."; }
+    public LinuxTorrentFactAttribute() { if (!OperatingSystem.IsLinux()) Skip = "Requires a bundled native Linux engine; exercised by both Linux CI architectures."; }
 }
 
 public sealed class NativeTorrentRuntimeTests
@@ -142,9 +142,9 @@ public sealed class NativeTorrentRuntimeTests
         Assert.Equal(13, record.Received);
         Assert.Equal("Nexonic test\n", await File.ReadAllTextAsync(record.SavedPath!));
         Assert.Equal(Path.Combine(destination, "fixture.bin"), record.SavedPath);
-        var checkpointPath = Path.Combine(AppPaths.Parts, record.Id.ToString("N"), "torrent.resume");
+        var checkpointPath = Path.Combine(AppPaths.Parts, record.Id.ToString("N"), "native", "torrent-payload.resume");
         Assert.True(File.Exists(checkpointPath));
-        Assert.NotEmpty(Convert.FromBase64String(await File.ReadAllTextAsync(checkpointPath)));
+        Assert.NotEmpty(await File.ReadAllBytesAsync(checkpointPath));
         Directory.Delete(Path.GetDirectoryName(checkpointPath)!, true);
     }
 }

@@ -184,6 +184,8 @@ public partial class MainWindow : Window
 
     // ---- toolbar ----
 
+    void OnTorrents(object s, RoutedEventArgs e) => Dialogs.TorrentManager(this, manager, CurrentQueue);
+
     void OnAdd(object s, RoutedEventArgs e) => ShowAdd(Dialogs.ClipboardLink(), CurrentQueue);
 
     bool adding;
@@ -195,7 +197,8 @@ public partial class MainWindow : Window
         try
         {
             Bring();
-            Dialogs.Add(this, manager, links, queueId ?? DownloadQueue.MainId);
+            if (SmartDownload.Detect(links) == DownloadEngine.Torrent) Dialogs.Torrent(this, manager, links, queueId ?? DownloadQueue.MainId);
+            else Dialogs.Add(this, manager, links, queueId ?? DownloadQueue.MainId);
         }
         finally { adding = false; }
     }

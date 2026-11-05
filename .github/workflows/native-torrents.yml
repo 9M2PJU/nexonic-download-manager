@@ -48,10 +48,11 @@ jobs:
         run: python scripts/build-torrent-native.py ${{ matrix.target }} --test
       - name: Managed host real-transfer tests (Linux)
         if: runner.os == 'Linux'
-        run: dotnet run --project native/tests/dotnet -- .native-cache/sdk/${{ matrix.target }}/lib/libnexonic_torrent.so
+        run: dotnet run --project native/tests/dotnet -p:NativeTorrentLibrary="$GITHUB_WORKSPACE/.native-cache/sdk/${{ matrix.target }}/lib/libnexonic_torrent.so" -- .native-cache/sdk/${{ matrix.target }}/lib/libnexonic_torrent.so
       - name: Managed host real-transfer tests (Windows)
         if: runner.os == 'Windows'
-        run: dotnet run --project native/tests/dotnet -- .native-cache/sdk/${{ matrix.target }}/bin/nexonic_torrent.dll
+        shell: pwsh
+        run: dotnet run --project native/tests/dotnet "-p:NativeTorrentLibrary=$env:GITHUB_WORKSPACE/.native-cache/sdk/${{ matrix.target }}/bin/nexonic_torrent.dll" -- .native-cache/sdk/${{ matrix.target }}/bin/nexonic_torrent.dll
       - uses: actions/upload-artifact@v7
         with:
           name: torrent-native-${{ matrix.target }}

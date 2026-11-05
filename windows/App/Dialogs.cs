@@ -9,7 +9,7 @@ using Nexonic.Core;
 namespace Nexonic.App;
 
 /// <summary>The app's small windows, built in code so each one reads top to bottom.</summary>
-public static class Dialogs
+public static partial class Dialogs
 {
     static readonly Brush Muted = Brushes.DimGray;
 

@@ -20,6 +20,7 @@ APP="$OUT/app"
 rm -rf "$OUT"
 mkdir -p "$APP"
 
+python3 "$ROOT/scripts/build-torrent-native.py" "$RID"
 echo "== App ($RID)"
 dotnet publish "$ROOT/linux/App/App.csproj" -c Release -r "$RID" --self-contained -p:Version="$VERSION" -p:DebugType=embedded -o "$APP" -nologo
 # The browser helper and ndm command share the app's runtime: only its own files are added.
@@ -29,6 +30,9 @@ cp "$OUT/host"/nexonic-host "$OUT/host"/nexonic-host.dll "$OUT/host"/nexonic-hos
 rm -rf "$OUT/host"
 find "$APP" -name "*.pdb" -delete
 
+cp "$ROOT/.native-cache/sdk/$RID/lib/libnexonic_torrent.so" "$APP/"
+cp -R "$ROOT/.native-cache/sdk/$RID/notices" "$APP/torrent-licenses"
+cp "$ROOT/.native-cache/sdk/$RID/native-components.json" "$APP/torrent-components.json"
 echo "== Video engine and browser extension"
 cp "$FF/ffmpeg" "$FF/ffprobe" "$TOOLS/yt-dlp" "$TOOLS/qjs" "$APP/"
 chmod 755 "$APP/ffmpeg" "$APP/ffprobe" "$APP/yt-dlp" "$APP/qjs" "$APP/NexonicDownloadManager" "$APP/nexonic-host"

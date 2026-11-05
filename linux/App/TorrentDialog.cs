@@ -11,11 +11,11 @@ public static partial class Dialogs
 {
     public static async Task Torrent(Window owner, DownloadManager manager, string source, string queueId)
     {
-        var f = new Form(owner, "Add Torrent (experimental)", 640);
+        var f = new Form(owner, "Add Torrent", 640);
         f.Note("Torrent peers and trackers can see your IP address. Only download material you may share. " +
-               "This optional Linux engine uses /usr/bin/python3 with python3-libtorrent (2.x). " +
+               "The bundled native engine downloads and verifies the actual files. " +
                "It connects directly: choose No proxy and disable the shared speed limit / DNS over HTTPS first. " +
-               "Web seeds and local-network peers are disabled. Seeding stops on completion; partial files are retained on removal.");
+               "Web seeds and local-network peers are disabled. Seeding uses your chosen ratio/time limits; partial files are retained on removal.");
         var enabled = f.Check("Enable experimental torrents", manager.Settings.TorrentsEnabled);
         enabled.PropertyChanged += (_, change) =>
         {
@@ -24,7 +24,7 @@ public static partial class Dialogs
             settings.TorrentsEnabled = enabled.IsChecked == true;
             manager.ApplySettings(settings);
         };
-        var input = f.Text("Magnet link or absolute path to a local .torrent file", source);
+        var input = f.Text("Magnet, HTTP(S) torrent link or local .torrent file", source);
         var pick = new Button { Content = "Choose .torrent…" };
         f.Body.Children.Add(pick);
         pick.Click += async (_, _) =>
@@ -35,7 +35,8 @@ public static partial class Dialogs
         };
         var folder = f.Folder(manager.Settings.Folder);
         var queue = f.Queue(manager, queueId);
-        var limit = f.Text("Torrent download limit in KB/s (0 = unlimited)", "0");
+        var draft = new TorrentMetadata();
+        var options = new NativeTorrentOptionsForm(f, draft, 0);
         var preview = f.Note("Load metadata to preview the name, size and files before starting.");
         var fileList = f.Field("Files — choose Skip, Low, Normal or High", new TorrentFileSelection());
         var error = f.Error();
@@ -83,8 +84,12 @@ public static partial class Dialogs
                 _ = metadata.SelectedSize; // Reject empty selection before creating a task.
                 var destination = (folder.Text ?? "").Trim();
                 if (!Path.IsPathFullyQualified(destination)) { error.Text = "Choose an absolute destination folder."; return; }
+                var limit = options.Save(draft);
+                metadata.Seed = draft.Seed; metadata.Dht = draft.Dht; metadata.RatioLimit = draft.RatioLimit; metadata.SeedSeconds = draft.SeedSeconds;
+                metadata.UploadLimitKBps = draft.UploadLimitKBps;
+                if (draft.Trackers.Count > 0) metadata.Trackers = draft.Trackers;
                 manager.AddTorrent(previewSource, metadata, new AddOptions { Folder = destination,
-                    QueueId = Form.QueueId(queue), Start = start, SpeedLimitKBps = Ui.Number(limit.Text) });
+                    QueueId = Form.QueueId(queue), Start = start, SpeedLimitKBps = limit });
                 f.Close();
             }
             catch (Exception e) { error.Text = e.Message; }
@@ -95,17 +100,26 @@ public static partial class Dialogs
     }
     public static async Task TorrentFiles(Window owner, DownloadManager manager, Row row)
     {
-        if (row.Record.Torrent is not { } torrent) return;
-        var f = new Form(owner, "Torrent Files", 640);
+        if (row.Record.Torrent is not { MetadataPending: false } torrent) return;
+        var f = new Form(owner, "Torrent Files and Settings", 700);
         f.Note($"{torrent.Name} · {Row.Bytes(torrent.Size)} total\nChanging the selection pauses this torrent. Resume it when ready; existing files stay on disk. " +
                "Skipping a file can still require boundary pieces shared with selected files.");
         var selection = f.Field("Files and priorities", new TorrentFileSelection());
         selection.Load(torrent);
+        f.Note(TorrentText.Summary(torrent));
+        var options = new NativeTorrentOptionsForm(f, torrent, row.Record.SpeedLimitKBps ?? 0);
         var error = f.Error();
         f.AddButton("Cancel", f.Close, isCancel: true);
         f.AddButton("Save and Pause", () =>
         {
-            try { manager.SetTorrentPriorities(row, selection.Priorities); f.Close(); }
+            try
+            {
+                var draft = new TorrentMetadata(); var limit = options.Save(draft);
+                manager.SetTorrentPriorities(row, selection.Priorities);
+                torrent.Seed = draft.Seed; torrent.Dht = draft.Dht; torrent.RatioLimit = draft.RatioLimit;
+                torrent.UploadLimitKBps = draft.UploadLimitKBps; torrent.SeedSeconds = draft.SeedSeconds; torrent.Trackers = draft.Trackers;
+                row.Record.SpeedLimitKBps = limit; manager.Save(); f.Close();
+            }
             catch (Exception e) { error.Text = e.Message; }
         });
         await f.Show();
