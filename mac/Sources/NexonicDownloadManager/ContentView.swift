@@ -1,5 +1,6 @@
 import AppKit
 import NexonicCore
+import NexonicTorrent
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -40,7 +41,7 @@ extension FileCategory {
 }
 
 enum Sheet: Identifiable {
-    case add(AddRequest), batch, scheduler(String), grabber, properties(UUID), refresh(UUID)
+    case add(AddRequest), batch, scheduler(String), grabber, properties(UUID), refresh(UUID), torrent(String)
 
     var id: String {
         switch self {
@@ -50,6 +51,7 @@ enum Sheet: Identifiable {
         case .grabber: return "grabber"
         case .properties(let id): return "properties-\(id)"
         case .refresh(let id): return "refresh-\(id)"
+        case .torrent: return "torrent"
         }
     }
 }
@@ -236,6 +238,10 @@ struct ContentView: View {
                 .help("Stop \(manager.queueName(currentQueue))")
             Button { sheet = .grabber } label: { Label("Grabber", systemImage: "globe") }.help("Download files from a website section")
             Button { sheet = .batch } label: { Label("Batch", systemImage: "number") }.help("Download a numbered series of files")
+            Button { sheet = .torrent(TorrentSource.isTorrent(clipboardLink()) ? clipboardLink() : "") } label: {
+                Label("Torrents", systemImage: "arrow.down.circle.dotted")
+            }
+            .help("Add a .torrent file, torrent link or magnet")
             if #available(macOS 14, *) {
                 SettingsLink { Label("Options", systemImage: "gearshape") }.help("Options")
             } else {
@@ -254,6 +260,7 @@ struct ContentView: View {
         case .grabber: GrabberSheet(queueID: currentQueue)
         case .properties(let id): PropertiesSheet(id: id)
         case .refresh(let id): RefreshSheet(id: id)
+        case .torrent(let source): TorrentSheet(queueID: currentQueue, initialSource: source)
         }
     }
 
@@ -359,7 +366,7 @@ struct ContentView: View {
 
 func statusColor(_ r: DownloadRecord) -> Color {
     switch r.status {
-    case .downloading, .probing: return brand
+    case .downloading, .probing, .seeding: return brand
     case .queued: return .orange
     case .paused: return .gray
     case .finished: return r.checksumResult?.contains("not") == true ? .red : .green
@@ -422,6 +429,7 @@ func isPreparingVideo(_ r: DownloadRecord) -> Bool {
 func statusText(_ r: DownloadRecord) -> String {
     if isPreparingVideo(r) { return "Preparing video…" }
     switch r.status {
+    case .seeding: return "Seeding"
     case .queued: return "Queued"
     case .probing: return "Connecting…"
     case .downloading: return "\(Int(r.progress * 100))%"
