@@ -16,3 +16,7 @@ linux/**/obj/
 # Generated Python bytecode
 __pycache__/
 *.py[cod]
+
+# Native torrent toolchain and generated SDKs
+.native-cache/
+native/build/
