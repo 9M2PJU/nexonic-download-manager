@@ -42,7 +42,7 @@ jobs:
             .native-cache/installed
             .native-cache/binaries
             .native-cache/vcpkg/downloads
-          key: native-${{ matrix.target }}-${{ hashFiles('native/vcpkg.json') }}
+          key: native-${{ matrix.target }}-${{ hashFiles('native/vcpkg.json', 'native/triplets/**') }}
       - name: Build, real transfer and integrity tests
         run: python scripts/build-torrent-native.py ${{ matrix.target }} --test
       - name: Managed host real-transfer tests (Linux)

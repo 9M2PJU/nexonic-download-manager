@@ -13,9 +13,9 @@ CACHE = ROOT / '.native-cache'
 PIN = 'ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0'
 TARGETS = {
     'win-x64': 'x64-windows-static', 'linux-x64': 'x64-linux', 'linux-arm64': 'arm64-linux',
-    'mac-x64': 'x64-osx', 'mac-arm64': 'arm64-osx',
-    'mac-current': 'arm64-osx' if platform.machine() == 'arm64' else 'x64-osx', 'ios-arm64': 'arm64-ios',
-    'ios-sim-arm64': 'arm64-ios-simulator', 'ios-sim-x64': 'x64-ios',
+    'mac-x64': 'nexonic-x64-osx', 'mac-arm64': 'nexonic-arm64-osx',
+    'mac-current': 'nexonic-arm64-osx' if platform.machine() == 'arm64' else 'nexonic-x64-osx', 'ios-arm64': 'nexonic-arm64-ios',
+    'ios-sim-arm64': 'nexonic-arm64-ios-simulator', 'ios-sim-x64': 'nexonic-x64-ios-simulator',
     'android-arm64': 'nexonic-arm64-android', 'android-arm': 'nexonic-arm-android', 'android-x64': 'nexonic-x64-android',
 }
 
@@ -64,7 +64,7 @@ def build(target, test):
     if target.startswith('android-'):
         command += ['-DANDROID_STL=c++_static']
     if target.startswith('mac-'):
-        command += [f'-DCMAKE_OSX_ARCHITECTURES={"arm64" if triplet.startswith("arm64") else "x86_64"}', '-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0']
+        command += [f'-DCMAKE_OSX_ARCHITECTURES={"arm64" if "arm64" in triplet else "x86_64"}', '-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0']
     if target.startswith('ios-'):
         command += ['-DCMAKE_SYSTEM_NAME=iOS', '-DCMAKE_OSX_DEPLOYMENT_TARGET=17.0',
                     f'-DCMAKE_OSX_SYSROOT={"iphonesimulator" if "sim" in target else "iphoneos"}',
