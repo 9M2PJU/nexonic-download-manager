@@ -13,16 +13,25 @@ TERMUX_COMMIT=8ddd9a7fc8e06330545487d81bb7591cb40f1aa6
 WORK="$(mktemp -d)"
 ROOT="$WORK/Android-GPL-Sources"
 mkdir -p "$ROOT/upstream"
+fetch() { curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --connect-timeout 20 -o "$2" "$1" && usable "$2"; }
+usable() { # the recipe's file, or at least a real source archive (not an error or challenge page served with status 200)
+  if [ -n "${WANT:-}" ] && [ "$WANT" != SKIP_CHECKSUM ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$WANT" ]; then return 0; fi
+  tar -tf "$1" >/dev/null 2>&1 || unzip -tq "$1" >/dev/null 2>&1
+}
 get() { # the URL, then known mirrors for hosts that are often down
-  curl -fsSL --retry 4 -o "$2" "$1" && return 0
+  fetch "$1" "$2" && return 0
   case "$1" in
-    *fossies.org/*/lzo-*) curl -fsSL --retry 4 -o "$2" "https://www.oberhumer.com/opensource/lzo/download/$(basename "$1" .tar.xz).tar.gz" ;;
+    *ffmpeg.org/releases/ffmpeg-*)
+      v="$(basename "$1" | sed -E 's/^ffmpeg-(.*)\.tar\.[a-z0-9]+$/\1/')"
+      fetch "https://ffmpeg.org/releases/$(basename "$1")" "$2" \
+        || fetch "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n$v.tar.gz" "$2" ;;
+    *fossies.org/*/lzo-*) fetch "https://www.oberhumer.com/opensource/lzo/download/$(basename "$1" .tar.xz).tar.gz" "$2" ;;
     *downloads.sourceforge.net/project/giflib/giflib-5.*)
       # Upstream moved the 5.x releases into a subdirectory in 2026.
-      curl -fsSL --retry 4 -o "$2" "https://downloads.sourceforge.net/project/giflib/giflib-5.x/$(basename "$1")" \
-        || curl -fsSL --retry 4 -o "$2" "https://mirrors.omnios.org/libgif/$(basename "$1")" ;;
-    *downloads.sourceforge.net/project/*) curl -fsSL --retry 4 -o "$2" "https://master.dl.sourceforge.net/project/${1#*downloads.sourceforge.net/project/}?viasf=1" ;;
-    *) return 1 ;;
+      fetch "https://downloads.sourceforge.net/project/giflib/giflib-5.x/$(basename "$1")" "$2" \
+        || fetch "https://mirrors.omnios.org/libgif/$(basename "$1")" "$2" ;;
+    *downloads.sourceforge.net/project/*) fetch "https://master.dl.sourceforge.net/project/${1#*downloads.sourceforge.net/project/}?viasf=1" "$2" ;;
+    *) sleep 20; fetch "$1" "$2" ;;  # one more try after a pause
   esac
 }
 
@@ -80,13 +89,15 @@ while [ ${#queue[@]} -gt 0 ]; do
       git+*) if git clone -q --depth 1 "${u#git+}" "$ROOT/upstream/$name/$(basename "${u%.git}")"; then rm -rf "$ROOT/upstream/$name"/*/.git
              else echo "::warning::Could not clone $u"; echo "$name: NOT INCLUDED (clone failed, get it from $u)" >> "$ROOT/COMPONENTS.txt"; continue; fi ;;
       *) f="$ROOT/upstream/$name/$(basename "${u%%\?*}")"
+         WANT="${sums[$i]:-}"
          if ! get "$u" "$f"; then
            echo "::warning::Could not download $u"; echo "$name: NOT INCLUDED (download failed, get it from $u)" >> "$ROOT/COMPONENTS.txt"; continue
          fi
          want="${sums[$i]:-}"
          if [ -n "$want" ] && [ "$want" != SKIP_CHECKSUM ]; then
            got="$(sha256sum "$f" | cut -d' ' -f1)"
-           # Upstream sometimes re-packs an archive; keep it, but say so (the recipe's checksum is in termux-packages/).
+           # Upstream sometimes re-packs an archive (it is a verified archive by now); keep it, but say so
+           # (the recipe's checksum is in termux-packages/).
            [ "$got" = "$want" ] || { echo "::warning::Checksum differs from the recipe: $u"; echo "$name: checksum differs from the recipe ($got)" >> "$ROOT/COMPONENTS.txt"; }
          fi ;;
     esac
