@@ -164,8 +164,8 @@ std::shared_ptr<lt::torrent_info> torrent_info(std::vector<char> const& bytes) {
     std::set<std::string> seen;
     for (auto index : ti->files().file_range()) {
         auto path = ti->files().file_path(index);
-        if (fs::path(path).is_absolute()) throw std::runtime_error("Unsafe torrent path");
-        for (auto const& part : fs::path(path)) component(part.string());
+        if (fs::u8path(path).is_absolute()) throw std::runtime_error("Unsafe torrent path");
+        for (auto const& part : fs::u8path(path)) component(part.u8string());
         std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return char(std::tolower(c)); });
         if (!seen.insert(path).second || bool(ti->files().file_flags(index) & lt::file_storage::flag_symlink)) throw std::runtime_error("Duplicate path or symlink in torrent");
     }
@@ -174,7 +174,7 @@ std::shared_ptr<lt::torrent_info> torrent_info(std::vector<char> const& bytes) {
 void safe_payload(fs::path const& root, lt::torrent_info const& ti) {
     private_directory(root);
     for (auto index : ti.files().file_range()) {
-        auto path = root / fs::path(ti.files().file_path(index));
+        auto path = root / fs::u8path(ti.files().file_path(index));
         for (auto p = path; p != root && p != p.parent_path(); p = p.parent_path()) {
             if (fs::is_symlink(fs::symlink_status(p))) throw std::runtime_error("Torrent data path contains a symbolic link");
         }
@@ -307,7 +307,7 @@ struct Engine {
                         for (auto index : ti->files().file_range()) if (j.selection[static_cast<std::size_t>(static_cast<int>(index))] != lt::dont_download && !bool(ti->files().file_flags(index) & lt::file_storage::flag_pad_file)) {
                             auto relative = ti->files().file_path(index); auto path = j.destination / fs::u8path(relative);
                             if (ti->files().file_size(index) == 0 && !fs::exists(path)) { fs::create_directories(path.parent_path()); std::ofstream empty(path); }
-                            j.hashes[relative] = digest_file(path);
+                            j.hashes[fs::u8path(relative).generic_u8string()] = digest_file(path);
                         }
                         j.verified = true; save(j);
                     }
@@ -339,7 +339,7 @@ struct Engine {
             result["info_hash_v2"] = ti->info_hashes().has_v2() ? lt::aux::to_hex(ti->info_hashes().v2.to_string()) : "";
             result["metainfo"] = j.metainfo.empty() ? "" : encode(j.metainfo);
             result["files"] = json::array(); auto progress = j.handle.file_progress();
-            for (auto index : ti->files().file_range()) result["files"].push_back({{"index",int(index)}, {"path",ti->files().file_path(index)}, {"size",ti->files().file_size(index)},
+            for (auto index : ti->files().file_range()) result["files"].push_back({{"index",int(index)}, {"path",fs::u8path(ti->files().file_path(index)).generic_u8string()}, {"size",ti->files().file_size(index)},
                 {"received",progress[static_cast<std::size_t>(static_cast<int>(index))]},{"priority",j.selection.empty() ? 4 : int(static_cast<std::uint8_t>(j.selection[static_cast<std::size_t>(static_cast<int>(index))]))}, {"pad",bool(ti->files().file_flags(index) & lt::file_storage::flag_pad_file)}});
         }
         result["trackers"] = json::array(); for (auto const& t : j.handle.trackers()) result["trackers"].push_back(t.url);
