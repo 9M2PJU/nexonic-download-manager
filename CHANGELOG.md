@@ -1,3 +1,10 @@
+## 0.11.1
+
+- Everything in 0.11.0 below (torrents on Mac). 0.11.0 was not published: a source server failed while its Android
+  source archive was being built.
+- Android source archive: every downloaded source is now verified (recipe checksum, or a real archive rather than an
+  error page), downloads retry, and FFmpeg and v4l-utils have backup sources.
+
 ## 0.11.0
 
 - **Torrents on Mac:** the same built-in engine as Windows and Linux. Click **Torrents** in the toolbar, turn torrents
