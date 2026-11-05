@@ -25,6 +25,10 @@ get() { # the URL, then known mirrors for hosts that are often down
       v="$(basename "$1" | sed -E 's/^ffmpeg-(.*)\.tar\.[a-z0-9]+$/\1/')"
       fetch "https://ffmpeg.org/releases/$(basename "$1")" "$2" \
         || fetch "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n$v.tar.gz" "$2" ;;
+    *linuxtv.org/downloads/v4l-utils/v4l-utils-*)
+      v="$(basename "$1" | sed -E 's/^v4l-utils-(.*)\.tar\.[a-z0-9]+$/\1/')"
+      fetch "https://www.linuxtv.org/downloads/v4l-utils/$(basename "$1")" "$2" \
+        || fetch "https://github.com/gjasny/v4l-utils/archive/refs/tags/v4l-utils-$v.tar.gz" "$2" ;;
     *fossies.org/*/lzo-*) fetch "https://www.oberhumer.com/opensource/lzo/download/$(basename "$1" .tar.xz).tar.gz" "$2" ;;
     *downloads.sourceforge.net/project/giflib/giflib-5.*)
       # Upstream moved the 5.x releases into a subdirectory in 2026.
