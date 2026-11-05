@@ -74,6 +74,8 @@ public sealed partial class DownloadManager
         Settings = s;
         limiter.SetLimit(s.SpeedLimitKBps * 1024);
         Network.Options = s.Network.Clamped();
+        if (TorrentRuntime.Unavailable(s) != null)
+            foreach (var row in Rows.Where(r => r.Record.Torrent != null && r.Record.IsActive).ToList()) Pause(row);
         Write(AppPaths.Settings, s);
         Schedule();
     }
@@ -135,6 +137,7 @@ public sealed partial class DownloadManager
         var start = job.Start ?? (profile?.StartAtOnce == false ? false : o.Start);
         var rec = new DownloadRecord
         {
+            Torrent = SmartDownload.Detect(job.Url) == DownloadEngine.Torrent ? new TorrentMetadata { MetadataPending = true } : null,
             Url = job.Url, Referrer = job.Referrer, Cookies = job.Cookies, UserAgent = profile?.UserAgent is { Length: > 0 } ua ? ua : job.UserAgent,
             Folder = chosenFolder ?? Settings.Folder,
             FileName = name,
@@ -155,6 +158,43 @@ public sealed partial class DownloadManager
         Schedule();
         Save();
         return rec.Id;
+    }
+
+    /// <summary>Explicit, previewed torrent entry point. Browser/CLI/local API validators remain HTTP-only.</summary>
+    public Guid AddTorrent(string source, TorrentMetadata metadata, AddOptions options)
+    {
+        if (TorrentRuntime.Unavailable(Settings) is { } reason) throw new InvalidOperationException(reason);
+        if (SmartDownload.Detect(source) != DownloadEngine.Torrent || metadata.Files.Count == 0 || string.IsNullOrEmpty(metadata.Metainfo))
+            throw new ArgumentException("Preview a local torrent or magnet before adding it.");
+        var rec = new DownloadRecord { Url = source, FileName = metadata.Name, Size = metadata.SelectedSize,
+            Folder = options.Folder ?? Settings.Folder, QueueId = options.QueueId, Torrent = metadata,
+            Status = options.Start ? DownloadStatus.Queued : DownloadStatus.Paused,
+            SpeedLimitKBps = options.SpeedLimitKBps > 0 ? options.SpeedLimitKBps : null };
+        Rows.Insert(0, new Row(rec, QueueName));
+        Save();
+        Schedule();
+        return rec.Id;
+    }
+
+    public void SetTorrentPriorities(Row row, IReadOnlyList<int> priorities)
+    {
+        var torrent = row.Record.Torrent ?? throw new ArgumentException("This is not a torrent.");
+        // Validate a copy before altering a running task or its previous selection.
+        var candidate = new TorrentMetadata { Files = torrent.Files, FilePriorities = priorities.ToList() };
+        var selectedSize = candidate.SelectedSize;
+        var changed = !torrent.Priorities().SequenceEqual(candidate.Priorities());
+        Pause(row);
+        torrent.FilePriorities = candidate.FilePriorities;
+        if (changed)
+        {
+            torrent.PayloadComplete = false; torrent.CompletionNotified = false; torrent.Sha256.Clear();
+            torrent.Received = 0; // The new selection must be verified again.
+            row.Record.SavedPath = null; row.Record.Finished = null;
+        }
+        row.Record.Size = selectedSize;
+        row.Record.Status = DownloadStatus.Paused;
+        row.Refresh();
+        Save();
     }
 
     static string? NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
@@ -392,19 +432,16 @@ public sealed partial class DownloadManager
         foreach (var q in Queues.Where(q => q.Running).ToList())
         {
             var limit = q.IsMain ? Settings.MaxActive : q.MaxActive;
-            var slots = Math.Max(1, limit) - transfers.Values.Count(t => t.Record.Queue == q.Id);
+            var slots = Math.Max(1, limit) - transfers.Values.Count(t => t.Record.Queue == q.Id && t.Record.Status != DownloadStatus.Seeding);
             foreach (var row in Rows.Reverse().Where(r => r.Record.Queue == q.Id && r.Record.Status == DownloadStatus.Queued).ToList())
             {
                 if (slots-- <= 0) break;
                 var profile = HostProfiles.Match(Settings.HostProfiles, row.Record.Url);
                 var proxy = profile?.Proxy ?? Settings.Proxy;
                 var connections = Math.Clamp(profile?.MaxConnections ?? Settings.Connections, 1, 32);
-                IDownloader t = row.Record.SiteVideo == true
-                    ? new SiteVideoTransfer(row.Record, Settings.SortIntoCategoryFolders, Settings.SpeedLimitKBps, proxy)
-                    : row.Record.IsStream == true
-                    ? new StreamTransfer(row.Record, connections, limiter, Settings.SortIntoCategoryFolders, proxy)
-                    : new Transfer(row.Record, connections, limiter, Settings.SortIntoCategoryFolders, proxy,
-                        TransferOptions.From(Network.Options, profile));
+                var context = new DownloadContext(connections, limiter, Settings.SortIntoCategoryFolders, proxy,
+                    TransferOptions.From(Network.Options, profile), Settings.TorrentsEnabled, Settings.SpeedLimitKBps);
+                var t = new DownloadProviders().Create(row.Record, context);
                 transfers[row.Record.Id] = t;
                 row.Record.Status = DownloadStatus.Probing;
                 t.Changed += rec => System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Changed(row, rec, t));
@@ -415,11 +452,18 @@ public sealed partial class DownloadManager
 
     void Changed(Row row, DownloadRecord rec, IDownloader t)
     {
-        row.Refresh();
-        if (rec.Status is not (DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused)) return;
         if (!transfers.TryGetValue(rec.Id, out var current) || current != t) return; // already stopped by the app
+        row.Refresh();
+        if (rec.Torrent is { PayloadComplete: true, CompletionNotified: false } torrent)
+        {
+            torrent.CompletionNotified = true;
+            AfterDownload(rec);
+            Save();
+            if (rec.Status == DownloadStatus.Seeding) Schedule();
+        }
+        if (rec.Status is not (DownloadStatus.Finished or DownloadStatus.Failed or DownloadStatus.Paused)) return;
         transfers.Remove(rec.Id);
-        if (rec.Status == DownloadStatus.Finished) AfterDownload(rec);
+        if (rec.Status == DownloadStatus.Finished && rec.Torrent == null) AfterDownload(rec);
         if (rec.Status == DownloadStatus.Failed) Notify?.Invoke("Download failed", $"{rec.FileName}: {rec.Error}");
         Save();
         Schedule();
@@ -565,6 +609,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
         DownloadStatus.Queued => L.T("Queued"),
         DownloadStatus.Probing => L.T("Connecting…"),
         DownloadStatus.Downloading => $"{Percent:0}%",
+        DownloadStatus.Seeding => "Seeding",
         DownloadStatus.Paused => L.T(Record.AwaitingRefresh == true ? "Waiting for link" : "Stopped"),
         DownloadStatus.Finished => L.T(Record.ChecksumResult?.Contains("not") == true ? "Checksum failed" : "Complete"),
         _ => L.T("Error"),
@@ -573,7 +618,7 @@ public sealed class Row : System.ComponentModel.INotifyPropertyChanged
     public System.Windows.Media.ImageSource? Icon => FileIcon.For(Record.FileName);
     public System.Windows.Media.Brush StatusBrush => Record.Status switch
     {
-        DownloadStatus.Downloading or DownloadStatus.Probing => Theme.Accent,
+        DownloadStatus.Downloading or DownloadStatus.Probing or DownloadStatus.Seeding => Theme.Accent,
         DownloadStatus.Queued => Theme.Waiting,
         DownloadStatus.Paused => Theme.Idle,
         DownloadStatus.Finished => Record.ChecksumResult?.Contains("not") == true ? Theme.Bad : Theme.Good,

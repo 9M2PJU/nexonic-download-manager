@@ -20,7 +20,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
@@ -29,7 +29,7 @@ jobs:
       - name: Build and test tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq rpm xvfb xauth imagemagick desktop-file-utils ffmpeg python3-libtorrent >/dev/null
+          sudo apt-get install -y -qq rpm xvfb xauth imagemagick desktop-file-utils ffmpeg ninja-build pkg-config autoconf automake libtool >/dev/null
       - uses: actions/cache@v4
         id: ffmpeg
         with:
@@ -39,10 +39,19 @@ jobs:
         run: bash scripts/build-ffmpeg.sh linux .ffmpeg-cache/linux-${{ matrix.arch }}
       - name: Video engine
         run: bash scripts/fetch-video-tools.sh linux-${{ matrix.arch }} .tools-cache/linux-${{ matrix.arch }}
-      - name: Native torrent integration (generated data, loopback only)
-        run: /usr/bin/python3 tests/torrent_bridge_test.py
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .native-cache/installed
+            .native-cache/binaries
+            .native-cache/vcpkg/downloads
+          key: native-linux-${{ matrix.arch }}-${{ hashFiles('native/vcpkg.json') }}
+      - name: Native torrent engine and legal-data transfer
+        run: python3 scripts/build-torrent-native.py linux-${{ matrix.arch }} --test
+      - name: Managed provider integration
+        run: dotnet run --project native/tests/dotnet -p:NativeTorrentLibrary="$GITHUB_WORKSPACE/.native-cache/sdk/linux-${{ matrix.arch }}/lib/libnexonic_torrent.so" -- .native-cache/sdk/linux-${{ matrix.arch }}/lib/libnexonic_torrent.so
       - name: Tests
-        run: dotnet test linux/Tests/Tests.csproj
+        run: dotnet test linux/Tests/Tests.csproj -p:NativeTorrentLibrary="$GITHUB_WORKSPACE/.native-cache/sdk/linux-${{ matrix.arch }}/lib/libnexonic_torrent.so"
       - name: Build the app, AppImage, .deb and .rpm
         run: bash linux/packaging/build.sh ${{ matrix.arch }} .ffmpeg-cache/linux-${{ matrix.arch }} .tools-cache/linux-${{ matrix.arch }}
       - name: Check the app and the packages

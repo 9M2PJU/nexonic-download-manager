@@ -28,7 +28,7 @@ internal sealed class TorrentFileSelection : UserControl
             if (choice == null) return null;
             var row = new DockPanel { LastChildFill = true };
             var priority = new ComboBox { ItemsSource = new[] { "Skip", "Low", "Normal", "High" },
-                SelectedIndex = Array.IndexOf(Values, choice.Priority), Width = 106, Margin = new Thickness(8, 0, 0, 0) };
+                IsEnabled = !choice.File.Pad, SelectedIndex = Array.IndexOf(Values, choice.Priority), Width = 106, Margin = new Thickness(8, 0, 0, 0) };
             priority.SelectionChanged += (_, _) =>
             {
                 if (priority.SelectedIndex < 0) return;

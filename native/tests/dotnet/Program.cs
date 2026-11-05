@@ -78,6 +78,41 @@ try
         try { client.Invoke(new { action = "list" }); } catch (ObjectDisposedException) { disposed = true; }
         Require(disposed, "Disposed session accepted calls");
     }
+    // Exercise the actual queue provider as well as its C ABI, using pre-existing legal pieces.
+    const string fixture = "ZDQ6aW5mb2Q2Omxlbmd0aGkxM2U0Om5hbWUxMTpmaXh0dXJlLmJpbjEyOnBpZWNlIGxlbmd0aGkxNjM4NGU2OnBpZWNlczIwOqYWPxfthLnM+mxpSHvcE8OkwCtINzpwcml2YXRlaTFlZWU=";
+    var fixturePath = Path.Combine(root, "provider.torrent");
+    await File.WriteAllBytesAsync(fixturePath, Convert.FromBase64String(fixture));
+    var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+    listener.Start();
+    var httpUrl = $"http://127.0.0.1:{((System.Net.IPEndPoint)listener.LocalEndpoint).Port}/fixture.torrent";
+    using var httpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+    var serve = Task.Run(async () =>
+    {
+        try
+        {
+            using var client = await listener.AcceptTcpClientAsync(httpTimeout.Token);
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            while (await reader.ReadLineAsync(httpTimeout.Token) is { Length: > 0 }) { }
+            var data = Convert.FromBase64String(fixture);
+            await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/x-bittorrent\r\nContent-Length: {data.Length}\r\nConnection: close\r\n\r\n"), httpTimeout.Token);
+            await stream.WriteAsync(data, httpTimeout.Token);
+        }
+        finally { listener.Stop(); }
+    });
+    Require(SmartDownload.Detect(httpUrl) == DownloadEngine.Torrent, "HTTP torrent routed as an ordinary file");
+    var record = new DownloadRecord { Url = httpUrl, Folder = root, Torrent = new TorrentMetadata { MetadataPending = true } };
+    var recordFolder = Path.Combine(root, "Nexonic torrents", record.Id.ToString("N"));
+    Directory.CreateDirectory(recordFolder);
+    await File.WriteAllTextAsync(Path.Combine(recordFolder, "fixture.bin"), "Nexonic test\n");
+    var provider = new DownloadProviders().Create(record, new DownloadContext(1, new(), false, new() { Mode = ProxyMode.None }, new(), TorrentsEnabled: true));
+    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(35)))
+    using (timeout.Token.Register(provider.Pause)) await provider.StartAsync().WaitAsync(TimeSpan.FromSeconds(40));
+    await serve;
+    Require(record.Status == DownloadStatus.Finished && record.Torrent!.PayloadComplete && record.Received == 13, "Queue provider failed native completion: " + record.Error);
+    Require(record.SavedPath == Path.Combine(recordFolder, "fixture.bin"), "Provider saved path differs");
+    Require(record.Torrent.Sha256.Count == 1, "Provider omitted verified hashes");
+    Directory.Delete(Path.Combine(AppPaths.Parts, record.Id.ToString("N")), true);
     var descriptor = Path.Combine(root, "fixture.torrent");
     await File.WriteAllBytesAsync(descriptor, Convert.FromBase64String(metadata));
     Require((await TorrentSource.ReadMetadataAsync(descriptor)).SequenceEqual(Convert.FromBase64String(metadata)), "Descriptor bytes changed");
@@ -85,6 +120,6 @@ try
     bool limited = false;
     try { await TorrentSource.ReadMetadataAsync(Path.Combine(root, "oversized.torrent")); } catch (InvalidDataException) { limited = true; }
     Require(limited, "Oversized metadata accepted");
-    Console.WriteLine("PASS: managed native real transfer, UTF-8 paths, magnet preview, file selection, restart, SHA-256, concurrent calls, safe removal and metadata bounds");
+    Console.WriteLine("PASS: managed native real transfer, UTF-8 paths, magnet preview, file selection, restart, SHA-256, concurrent calls, safe removal, HTTP descriptor-to-payload completion and metadata bounds");
 }
 finally { Directory.Delete(root, true); }
